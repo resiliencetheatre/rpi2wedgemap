@@ -1,0 +1,19 @@
+TACMSGROUTER_VERSION = 962da737bead13006a0f9b2ddbb06856978a99d2
+TACMSGROUTER_SITE = https://codeberg.org/48554e6d/tacmsgrouter.git
+TACMSGROUTER_SITE_METHOD = git
+TACMSGROUTER_DEPENDENCIES = libcurl
+TACMSGROUTER_PREFIX = $(TARGET_DIR)/usr
+
+define TACMSGROUTER_BUILD_CMDS
+     $(MAKE) $(TARGET_CONFIGURE_OPTS) -C $(@D)
+endef
+
+define TACMSGROUTER_INSTALL_TARGET_CMDS
+        (cd $(@D); cp tacmsgrouter $(TACMSGROUTER_PREFIX)/bin)
+endef
+
+define TACMSGROUTER_CLEAN_CMDS
+        $(MAKE) $(TACMSGROUTER_MAKE_OPTS) -C $(@D) clean
+endef
+
+$(eval $(generic-package))

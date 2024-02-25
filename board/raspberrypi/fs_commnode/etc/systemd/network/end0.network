@@ -1,0 +1,4 @@
+[Match]
+Name=end0
+[Network]
+DHCP=ipv4

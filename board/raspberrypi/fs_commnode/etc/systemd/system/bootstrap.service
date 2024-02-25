@@ -1,0 +1,10 @@
+[Unit]
+Description=bootstrap service
+After=opt-boot.mount multi-user.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/boot/
+ExecStartPre=sleep 2
+ExecStart=/opt/boot/bootstrap.sh
+RemainAfterExit=true
