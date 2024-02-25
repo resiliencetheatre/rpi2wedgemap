@@ -3,6 +3,10 @@
 External tree for [buildroot](https://buildroot.org) to build 
 [Raspberry Pi Zero 2 W](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/) firmware 
 image with [Waveshare 2.13" display](https://www.waveshare.com/product/2.13inch-touch-e-paper-hat-with-case.htm) support.
+With this small unit you are able to serve full world street level map and terrain mode to any phone with web browser.
+Based on configuration, unit can create wifi access point and serve full spatial situation scope system from small
+and disposable unit. No need for internet or App's on EUD.
+
 
 ![rpi2wedgemap](https://raw.githubusercontent.com/resiliencetheatre/rpi2wedgemap/main/doc/rpizero2w-image.png?raw=true)
 
