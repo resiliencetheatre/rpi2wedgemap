@@ -1,1 +1,0 @@
-KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", SUBSYSTEMS=="usb", RUN+="/opt/nfs/rpi-scripts/usb-insert.sh"

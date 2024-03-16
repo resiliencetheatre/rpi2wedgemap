@@ -5,7 +5,7 @@ image boot.vfat {
 		}
 	}
 
-	size = 780M
+	size = 100M
 }
 
 image sdcard.img {
@@ -17,9 +17,5 @@ image sdcard.img {
 		bootable = "true"
 		image = "boot.vfat"
 	}
-
-	partition rootfs {
-		partition-type = 0x83
-		image = "rootfs.ext4"
-	}
+    
 }

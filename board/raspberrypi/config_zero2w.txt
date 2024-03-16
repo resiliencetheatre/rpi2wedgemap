@@ -27,3 +27,10 @@ dtoverlay=miniuart-bt
 
 # enable autoprobing of Bluetooth driver without need of hciattach/btattach
 dtparam=krnbt=on
+
+# waveshare
+dtoverlay=dwc2
+dtparam=spi=on
+dtparam=i2c1=on
+dtparam=i2c_arm=on
+dtoverlay=i2c-bcm2708
