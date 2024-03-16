@@ -21,7 +21,7 @@ git clone https://git.buildroot.net/buildroot
 git clone https://github.com/resiliencetheatre/rpi2wedgemap
 ```
 
-Current build uses master branch of buildroot. Build is tested with 900bd80e9bfde5f1bb6c2dc746a9149a467f1f09.
+Current build uses master branch of buildroot. Build is tested with bb8766cc5463e59b931a10ec67793a79fb06eda7.
 
 Modify `rpi-firmware` package file and change firmware version tag to
 match kernel version (6.1.77) we're using. 
