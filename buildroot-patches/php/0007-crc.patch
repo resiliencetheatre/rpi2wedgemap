@@ -1,0 +1,11 @@
+--- a/ext/standard/crc32.c	2024-03-29 04:36:03.680988876 +0200
++++ b/ext/standard/crc32-modified.c	2024-03-29 04:36:50.612877702 +0200
+@@ -67,7 +67,7 @@
+ # if defined(__GNUC__)
+ #  if!defined(__clang__)
+ #   pragma GCC push_options
+-#   pragma GCC target ("+nothing+crc")
++#   pragma GCC target ("arch=armv8-a+crc")
+ #  elif defined(__APPLE__)
+ #   pragma clang attribute push(__attribute__((target("crc"))), apply_to=function)
+ #  else

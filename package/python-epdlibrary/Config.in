@@ -1,0 +1,6 @@
+config BR2_PACKAGE_PYTHON_EPDLIBRARY
+	bool "python-epdlibrary"
+	help
+	  e-paper for raspberry pi (Waveshare e-paper)
+
+	  https://github.com/soonuse/epd-library-python

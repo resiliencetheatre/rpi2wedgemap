@@ -1,0 +1,30 @@
+--- a/Makefile	2024-03-30 04:11:55.778016796 +0200
++++ b/Makefile	2024-03-30 04:17:45.647888219 +0200
+@@ -90,11 +90,11 @@
+ 
+ rgpiod:	rgpiod.o $(OBJ_RGPIOD) $(LIB_LGPIO)
+ 	$(CC) $(LDFLAGS) -o rgpiod rgpiod.o $(OBJ_RGPIOD) $(LINK_LGPIO)
+-	$(STRIP) rgpiod
++	
+ 
+ rgs:	rgs.o $(OBJ_RGS)
+ 	$(CC) $(LDFLAGS) -o rgs rgs.o $(OBJ_RGS)
+-	$(STRIP) rgs
++	
+ 
+ DOC/.docs: $(DOCS)
+ 	@[ -d "DOC" ] && cd DOC && ./cdoc || echo "*** No DOC directory ***"
+@@ -163,13 +163,11 @@
+ $(LIB_LGPIO):	$(OBJ_LGPIO)
+ 	$(SHLIB) -pthread $(LDFLAGS) -Wl,-soname,$(LIB_LGPIO).$(SOVERSION) -o $(LIB_LGPIO).$(SOVERSION) $(OBJ_LGPIO)
+ 	ln -fs $(LIB_LGPIO).$(SOVERSION) $(LIB_LGPIO)
+-	$(STRIPLIB) $(LIB_LGPIO)
+ 	$(SIZE)     $(LIB_LGPIO)
+ 
+ $(LIB_RGPIO):	$(OBJ_RGPIO)
+ 	$(SHLIB) -pthread $(LDFLAGS) -Wl,-soname,$(LIB_RGPIO).$(SOVERSION) -o $(LIB_RGPIO).$(SOVERSION) $(OBJ_RGPIO)
+ 	ln -fs $(LIB_RGPIO).$(SOVERSION) $(LIB_RGPIO)
+-	$(STRIPLIB) $(LIB_RGPIO)
+ 	$(SIZE)     $(LIB_RGPIO)
+ 
+ # generated using gcc -MM *.c
