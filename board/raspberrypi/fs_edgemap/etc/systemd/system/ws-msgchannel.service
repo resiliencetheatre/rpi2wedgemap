@@ -1,0 +1,15 @@
+[Unit]
+Description=gwsocket for msgchannel
+After=multi-user.target bootstrap.service opt-boot.mount mnt.mount
+Before=meshpipe.service
+
+[Service]
+WorkingDirectory=/opt/edgemap
+KillMode=process
+ExecStart=gwsocket -p 7990 --pipein=/tmp/msgchannel --pipeout=/tmp/msgincoming
+Restart=always
+RestartSec=15
+TimeoutStartSec=5
+
+[Install]
+WantedBy=multi-user.target
