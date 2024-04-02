@@ -5,10 +5,8 @@
 /dev/mmcblk0p1 /opt/boot auto rw,defaults,x-systemd.automount,x-systemd.device-timeout=10s,noatime,noauto 0 2
 
 # MicroSD
-/dev/mmcblk0p2 /mnt auto rw,defaults,x-systemd.automount,x-systemd.device-timeout=5,noatime,noauto 0 2
+/dev/mmcblk0p2 /mnt auto rw,defaults,x-systemd.automount,x-systemd.device-timeout=10s,noatime,noauto 0 2
 
 # External USB drive
-# /dev/sda1 /mnt auto ro,defaults,x-systemd.automount,x-systemd.device-timeout=5,noatime,noauto 0 2
+# /dev/sda1 /mnt auto ro,defaults,x-systemd.automount,x-systemd.device-timeout=10s,noatime,noauto 0 2
 
-# NFS
-# 10.100.0.20:/mnt/nfs /opt/nfs nfs4 defaults,user,exec,_netdev,noac 0 0
