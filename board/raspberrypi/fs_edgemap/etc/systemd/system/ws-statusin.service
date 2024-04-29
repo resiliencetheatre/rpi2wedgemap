@@ -1,13 +1,13 @@
 [Unit]
-Description=gwsocket for msgchannel
-After=multi-user.target
+Description=gwsocket for meshtastic telemetry messages
 Before=meshpipe.service
+After=multi-user.target
 PartOf=meshpipe.service
 
 [Service]
 WorkingDirectory=/tmp
 KillMode=process
-ExecStart=gwsocket -p 7990 --pipein=/tmp/msgchannel --pipeout=/tmp/msgincoming
+ExecStart=gwsocket -p 7995 --pipein=/tmp/statusin
 Restart=always
 RestartSec=5
 TimeoutStartSec=5

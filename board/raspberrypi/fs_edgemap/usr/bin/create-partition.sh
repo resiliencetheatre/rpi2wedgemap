@@ -1,8 +1,8 @@
 #!/bin/sh
-if [ -d "/mnt/lost+found" ] 
+if [ -d "/opt/data/lost+found" ] 
 then
-    echo "/mnt partition found!"
-    /bin/edgemap-ui -m "/mnt partition found" -d 2000
+    echo "/opt/data partition found!"
+    /bin/edgemap-ui -m "/opt/data partition found" -d 2000
 else
     /bin/edgemap-ui -m "Creating partition for maps"
     echo "Creating third partition"
