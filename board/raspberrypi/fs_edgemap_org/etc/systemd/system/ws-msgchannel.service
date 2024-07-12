@@ -1,0 +1,16 @@
+[Unit]
+Description=gwsocket for msgchannel
+After=multi-user.target
+Before=meshpipe.service
+PartOf=meshpipe.service
+
+[Service]
+WorkingDirectory=/tmp
+KillMode=process
+ExecStart=gwsocket -p 7990 --pipein=/tmp/msgchannel --pipeout=/tmp/msgincoming
+Restart=always
+RestartSec=5
+TimeoutStartSec=5
+
+[Install]
+WantedBy=multi-user.target

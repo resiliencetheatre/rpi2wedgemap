@@ -3,9 +3,9 @@ Description=meshtastic communication daemon
 After=multi-user.target ws-msgchannel.service ws-statusin.service
 
 [Service]
-WorkingDirectory=/opt/data/edgemap/meshpipe
+WorkingDirectory=/opt/edgemap/meshpipe
 KillMode=process
-EnvironmentFile=/opt/boot/meshtastic.env
+EnvironmentFile=/opt/edgemap/meshpipe/meshtastic.env
 ExecStart=/bin/python3 meshpipe.py --port=${MESHTASTIC_PORT}
 Restart=always
 RestartSec=5

@@ -14,3 +14,9 @@ elif [ -d ${TARGET_DIR}/etc/systemd ]; then
     ln -sf /lib/systemd/system/getty@.service \
        "${TARGET_DIR}/etc/systemd/system/getty.target.wants/getty@tty1.service"
 fi
+
+# Remove janus-gateway.service
+# rm ${TARGET_DIR}/usr/lib/systemd/system/janus-gateway.service
+
+# Alter permissions to /opt/edgemap-persist
+chmod o+w ${TARGET_DIR}/opt/edgemap-persist

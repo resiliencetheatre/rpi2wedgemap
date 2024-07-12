@@ -1,16 +1,15 @@
 [Unit]
-Description=gwsocket for meshtastic telemetry messages
-Before=meshpipe.service
+Description=gwsocket for meshtastic status messages (plain/7995)
 After=multi-user.target
-PartOf=meshpipe.service
+Conflicts=wss-statusin.service
 
 [Service]
-WorkingDirectory=/tmp
+WorkingDirectory=/opt/edgemap
 KillMode=process
 ExecStart=gwsocket -p 7995 --pipein=/tmp/statusin
 Restart=always
 RestartSec=5
 TimeoutStartSec=5
 
-[Install]
-WantedBy=multi-user.target
+# [Install]
+# WantedBy=multi-user.target
