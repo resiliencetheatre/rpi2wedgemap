@@ -37,6 +37,7 @@ cp /opt/wifi-ap/wifi-ap/wlan0.network /etc/systemd/network
 systemctl daemon-reload
 systemctl restart systemd-networkd
 systemctl restart hostapd
+systemctl restart dnsqmasq
 modprobe i2c-bcm2835
 modprobe i2c-dev
 sleep 10
