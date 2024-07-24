@@ -1,7 +1,0 @@
-# /opt/boot/burnnode.conf 
-# Sample burnnode.conf to boot partition
-INTERFACE=end0
-MACSEC_IP=10.100.0.10/24
-REMOTE_MAC_ADDRESS=a4:4c:c8:11:a2:be
-REMOTE_RX_KEY=190d6fcea27d83ead4193e9473ff4526
-MY_TX_KEY=3d1d81b318c4833fabcb28179e0d792f

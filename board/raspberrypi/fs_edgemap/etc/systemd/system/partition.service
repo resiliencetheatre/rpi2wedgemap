@@ -1,13 +1,12 @@
 [Unit]
 Description=partitioning service
 After=multi-user.target                    
-Before=bootstrap.service
 
 [Service]   
 Type=oneshot
 RemainAfterExit=true   
 ExecStart=sh -c /bin/create-partition.sh
 
-[Install]
-WantedBy=multi-user.target
+# [Install]
+# WantedBy=multi-user.target
 

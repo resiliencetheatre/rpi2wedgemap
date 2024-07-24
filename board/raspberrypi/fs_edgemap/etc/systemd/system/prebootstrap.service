@@ -1,0 +1,9 @@
+[Unit]
+Description=pre bootstrap service
+Before=bootstrap.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/boot/
+ExecStart=/opt/wifi-ap/prebootstrap.sh
+RemainAfterExit=true
