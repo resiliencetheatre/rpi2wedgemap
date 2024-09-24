@@ -3,7 +3,7 @@
 import Point from '@mapbox/point-geometry';
 import TinySDF from '@mapbox/tiny-sdf';
 import { VectorTileFeature, VectorTileLayer } from '@mapbox/vector-tile';
-import { Color, CompositeExpression, DiffCommand, DiffOperations, Feature, FeatureFilter, FeatureState, FilterSpecification, Formatted, FormattedSection, GeoJSONSourceSpecification, GlobalProperties, ICanonicalTileID, IMercatorCoordinate, ImageSourceSpecification, InterpolationType, LayerSpecification, LightSpecification, Padding, PromoteIdSpecification, PropertyValueSpecification, RasterDEMSourceSpecification, RasterSourceSpecification, ResolvedImage, SourceExpression, SourceSpecification, SpriteSpecification, StylePropertyExpression, StylePropertySpecification, StyleSpecification, TerrainSpecification, TransitionSpecification, VariableAnchorOffsetCollection, VectorSourceSpecification, VideoSourceSpecification } from '@maplibre/maplibre-gl-style-spec';
+import { Color, CompositeExpression, DiffCommand, DiffOperations, Feature, FeatureFilter, FeatureState, FilterSpecification, Formatted, FormattedSection, GeoJSONSourceSpecification, GlobalProperties, ICanonicalTileID, IMercatorCoordinate, ImageSourceSpecification, InterpolationType, LayerSpecification, LightSpecification, Padding, PromoteIdSpecification, PropertyValueSpecification, RasterDEMSourceSpecification, RasterSourceSpecification, ResolvedImage, SkySpecification, SourceExpression, SourceSpecification, SpriteSpecification, StylePropertyExpression, StylePropertySpecification, StyleSpecification, TerrainSpecification, TransitionSpecification, VariableAnchorOffsetCollection, VectorSourceSpecification, VideoSourceSpecification } from '@maplibre/maplibre-gl-style-spec';
 import { Options as GeoJSONVTOptions } from 'geojson-vt';
 import { mat2, mat4, vec4 } from 'gl-matrix';
 import KDBush from 'kdbush';
@@ -1583,7 +1583,7 @@ declare class Framebuffer {
 	destroy(): void;
 }
 declare class HeatmapStyleLayer extends StyleLayer {
-	heatmapFbo: Framebuffer;
+	heatmapFbos: Map<string, Framebuffer>;
 	colorRamp: RGBAImage;
 	colorRampTexture: Texture;
 	_transitionablePaint: Transitionable<HeatmapPaintProps>;
@@ -1903,6 +1903,18 @@ export declare class LngLatBounds {
 	 * ```
 	 */
 	static fromLngLat(center: LngLat, radius?: number): LngLatBounds;
+	/**
+	 * Adjusts the given bounds to handle the case where the bounds cross the 180th meridian (antimeridian).
+	 *
+	 * @returns The adjusted LngLatBounds
+	 * @example
+	 * ```ts
+	 * let bounds = new LngLatBounds([175.813127, -20.157768], [-178. 340903, -15.449124]);
+	 * let adjustedBounds = bounds.adjustAntiMeridian();
+	 * // adjustedBounds will be: [[175.813127, -20.157768], [181.659097, -15.449124]]
+	 * ```
+	 */
+	adjustAntiMeridian(): LngLatBounds;
 }
 /**
  * An `EdgeInset` object represents screen space padding applied to the edges of the viewport.
@@ -2453,7 +2465,7 @@ export type SourceClass = {
 /**
  * Adds a custom source type, making it available for use with {@link Map#addSource}.
  * @param name - The name of the source type; source definition objects use this name in the `{type: ...}` field.
- * @param sourceType - A {@link SourceClass} - which is a constructor for the `Source` interface.
+ * @param SourceType - A {@link SourceClass} - which is a constructor for the `Source` interface.
  * @returns a promise that is resolved when the source type is ready or rejected with an error.
  */
 export declare const addSourceType: (name: string, SourceType: SourceClass) => Promise<void>;
@@ -2505,7 +2517,7 @@ declare class SourceCache extends Evented {
 	_updated: boolean;
 	static maxUnderzooming: number;
 	static maxOverzooming: number;
-	constructor(id: string, options: SourceSpecification, dispatcher: Dispatcher);
+	constructor(id: string, options: SourceSpecification | CanvasSourceSpecification, dispatcher: Dispatcher);
 	onAdd(map: Map$1): void;
 	onRemove(map: Map$1): void;
 	/**
@@ -3171,6 +3183,96 @@ declare class ColorMode {
 	static unblended: Readonly<ColorMode>;
 	static alphaBlended: Readonly<ColorMode>;
 }
+export type PoolObject = {
+	id: number;
+	fbo: Framebuffer;
+	texture: Texture;
+	stamp: number;
+	inUse: boolean;
+};
+declare class RenderPool {
+	private readonly _context;
+	private readonly _size;
+	private readonly _tileSize;
+	private _objects;
+	/**
+	 * An index array of recently used pool objects.
+	 * Items that are used recently are last in the array
+	 */
+	private _recentlyUsed;
+	private _stamp;
+	constructor(_context: Context, _size: number, _tileSize: number);
+	destruct(): void;
+	private _createObject;
+	getObjectForId(id: number): PoolObject;
+	useObject(obj: PoolObject): void;
+	stampObject(obj: PoolObject): void;
+	getOrCreateFreeObject(): PoolObject;
+	freeObject(obj: PoolObject): void;
+	freeAllObjects(): void;
+	isFull(): boolean;
+}
+declare class RenderToTexture {
+	painter: Painter;
+	terrain: Terrain;
+	pool: RenderPool;
+	/**
+	 * coordsDescendingInv contains a list of all tiles which should be rendered for one render-to-texture tile
+	 * e.g. render 4 raster-tiles with size 256px to the 512px render-to-texture tile
+	 */
+	_coordsDescendingInv: {
+		[_: string]: {
+			[_: string]: Array<OverscaledTileID>;
+		};
+	};
+	/**
+	 * create a string representation of all to tiles rendered to render-to-texture tiles
+	 * this string representation is used to check if tile should be re-rendered.
+	 */
+	_coordsDescendingInvStr: {
+		[_: string]: {
+			[_: string]: string;
+		};
+	};
+	/**
+	 * store for render-stacks
+	 * a render stack is a set of layers which should be rendered into one texture
+	 * every stylesheet can have multiple stacks. A new stack is created if layers which should
+	 * not rendered to texture sit between layers which should rendered to texture. e.g. hillshading or symbols
+	 */
+	_stacks: Array<Array<string>>;
+	/**
+	 * remember the previous processed layer to check if a new stack is needed
+	 */
+	_prevType: string;
+	/**
+	 * a list of tiles that can potentially rendered
+	 */
+	_renderableTiles: Array<Tile>;
+	/**
+	 * a list of tiles that should be rendered to screen in the next render-call
+	 */
+	_rttTiles: Array<Tile>;
+	/**
+	 * a list of all layer-ids which should be rendered
+	 */
+	_renderableLayerIds: Array<string>;
+	constructor(painter: Painter, terrain: Terrain);
+	destruct(): void;
+	getTexture(tile: Tile): Texture;
+	prepareForRender(style: Style, zoom: number): void;
+	/**
+	 * due that switching textures is relatively slow, the render
+	 * layer-by-layer context is not practicable. To bypass this problem
+	 * this lines of code stack all layers and later render all at once.
+	 * Because of the stylesheet possibility to mixing render-to-texture layers
+	 * and 'live'-layers (f.e. symbols) it is necessary to create more stacks. For example
+	 * a symbol-layer is in between of fill-layers.
+	 * @param layer - the layer to render
+	 * @returns if true layer is rendered to texture, otherwise false
+	 */
+	renderLayer(layer: StyleLayer): boolean;
+}
 /**
  * A dash entry
  */
@@ -3267,96 +3369,6 @@ declare class GlyphManager {
 	}>;
 	_doesCharSupportLocalGlyph(id: number): boolean;
 	_tinySDF(entry: Entry, stack: string, id: number): StyleGlyph;
-}
-export type PoolObject = {
-	id: number;
-	fbo: Framebuffer;
-	texture: Texture;
-	stamp: number;
-	inUse: boolean;
-};
-declare class RenderPool {
-	private readonly _context;
-	private readonly _size;
-	private readonly _tileSize;
-	private _objects;
-	/**
-	 * An index array of recently used pool objects.
-	 * Items that are used recently are last in the array
-	 */
-	private _recentlyUsed;
-	private _stamp;
-	constructor(_context: Context, _size: number, _tileSize: number);
-	destruct(): void;
-	private _createObject;
-	getObjectForId(id: number): PoolObject;
-	useObject(obj: PoolObject): void;
-	stampObject(obj: PoolObject): void;
-	getOrCreateFreeObject(): PoolObject;
-	freeObject(obj: PoolObject): void;
-	freeAllObjects(): void;
-	isFull(): boolean;
-}
-declare class RenderToTexture {
-	painter: Painter;
-	terrain: Terrain;
-	pool: RenderPool;
-	/**
-	 * coordsDescendingInv contains a list of all tiles which should be rendered for one render-to-texture tile
-	 * e.g. render 4 raster-tiles with size 256px to the 512px render-to-texture tile
-	 */
-	_coordsDescendingInv: {
-		[_: string]: {
-			[_: string]: Array<OverscaledTileID>;
-		};
-	};
-	/**
-	 * create a string representation of all to tiles rendered to render-to-texture tiles
-	 * this string representation is used to check if tile should be re-rendered.
-	 */
-	_coordsDescendingInvStr: {
-		[_: string]: {
-			[_: string]: string;
-		};
-	};
-	/**
-	 * store for render-stacks
-	 * a render stack is a set of layers which should be rendered into one texture
-	 * every stylesheet can have multiple stacks. A new stack is created if layers which should
-	 * not rendered to texture sit between layers which should rendered to texture. e.g. hillshading or symbols
-	 */
-	_stacks: Array<Array<string>>;
-	/**
-	 * remember the previous processed layer to check if a new stack is needed
-	 */
-	_prevType: string;
-	/**
-	 * a list of tiles that can potentially rendered
-	 */
-	_renderableTiles: Array<Tile>;
-	/**
-	 * a list of tiles that should be rendered to screen in the next render-call
-	 */
-	_rttTiles: Array<Tile>;
-	/**
-	 * a list of all layer-ids which should be rendered
-	 */
-	_renderableLayerIds: Array<string>;
-	constructor(painter: Painter, terrain: Terrain);
-	destruct(): void;
-	getTexture(tile: Tile): Texture;
-	prepareForRender(style: Style, zoom: number): void;
-	/**
-	 * due that switching textures is relatively slow, the render
-	 * layer-by-layer context is not practicable. To bypass this problem
-	 * this lines of code stack all layers and later render all at once.
-	 * Because of the stylesheet possibility to mixing render-to-texture layers
-	 * and 'live'-layers (f.e. symbols) it is necessary to create more stacks. For example
-	 * a symbol-layer is in between of fill-layers.
-	 * @param layer - the layer to render
-	 * @returns if true layer is rendered to texture, otherwise false
-	 */
-	renderLayer(layer: StyleLayer): boolean;
 }
 export type RenderPass = "offscreen" | "opaque" | "translucent";
 export type PainterOptions = {
@@ -3549,6 +3561,13 @@ declare class TerrainSourceCache extends Evented {
 	 */
 	tilesAfterTime(time?: number): Array<Tile>;
 }
+declare class Mesh {
+	vertexBuffer: VertexBuffer;
+	indexBuffer: IndexBuffer;
+	segments: SegmentVector;
+	constructor(vertexBuffer: VertexBuffer, indexBuffer: IndexBuffer, segments: SegmentVector);
+	destroy(): void;
+}
 /**
  * @internal
  * A terrain GPU related object
@@ -3563,15 +3582,6 @@ export type TerrainData = {
 	texture: WebGLTexture;
 	depthTexture: WebGLTexture;
 	tile: Tile;
-};
-/**
- * @internal
- * A terrain mesh object
- */
-export type TerrainMesh = {
-	indexBuffer: IndexBuffer;
-	vertexBuffer: VertexBuffer;
-	segments: SegmentVector;
 };
 declare class Terrain {
 	/**
@@ -3611,7 +3621,7 @@ declare class Terrain {
 	 * GL Objects for the terrain-mesh
 	 * The mesh is a regular mesh, which has the advantage that it can be reused for all tiles.
 	 */
-	_mesh: TerrainMesh;
+	_mesh: Mesh;
 	/**
 	 * coords index contains a list of tileID.keys. This index is used to identify
 	 * the tile via the alpha-cannel in the coords-texture.
@@ -3707,7 +3717,7 @@ declare class Terrain {
 	 * create a regular mesh which will be used by all terrain-tiles
 	 * @returns the created regular mesh
 	 */
-	getTerrainMesh(): TerrainMesh;
+	getTerrainMesh(): Mesh;
 	/**
 	 * Calculates a height of the frame around the terrain-mesh to avoid stiching between
 	 * tile boundaries in different zoomlevels.
@@ -3756,9 +3766,11 @@ declare class Transform {
 	];
 	cameraToCenterDistance: number;
 	mercatorMatrix: mat4;
+	projectionMatrix: mat4;
 	modelViewProjectionMatrix: mat4;
 	invModelViewProjectionMatrix: mat4;
 	alignedModelViewProjectionMatrix: mat4;
+	fogMatrix: mat4;
 	pixelMatrix: mat4;
 	pixelMatrix3D: mat4;
 	pixelMatrixInverse: mat4;
@@ -3785,6 +3797,21 @@ declare class Transform {
 	_alignedPosMatrixCache: {
 		[_: string]: mat4;
 	};
+	_fogMatrixCache: {
+		[_: string]: mat4;
+	};
+	/**
+	 * This value represents the distance from the camera to the far clipping plane.
+	 * It is used in the calculation of the projection matrix to determine which objects are visible.
+	 * farz should be larger than nearZ.
+	 */
+	farZ: number;
+	/**
+	 * This value represents the distance from the camera to the near clipping plane.
+	 * It is used in the calculation of the projection matrix to determine which objects are visible.
+	 * nearZ should be smaller than farZ.
+	 */
+	nearZ: number;
 	constructor(minZoom?: number, maxZoom?: number, minPitch?: number, maxPitch?: number, renderWorldCopies?: boolean);
 	clone(): Transform;
 	apply(that: Transform): void;
@@ -3971,11 +3998,18 @@ declare class Transform {
 	 * @param bounds - A {@link LngLatBounds} object describing the new geographic boundaries of the map.
 	 */
 	setMaxBounds(bounds?: LngLatBounds | null): void;
+	calculateTileMatrix(unwrappedTileID: UnwrappedTileID): mat4;
 	/**
 	 * Calculate the posMatrix that, given a tile coordinate, would be used to display the tile on a map.
 	 * @param unwrappedTileID - the tile ID
 	 */
 	calculatePosMatrix(unwrappedTileID: UnwrappedTileID, aligned?: boolean): mat4;
+	/**
+	 * Calculate the fogMatrix that, given a tile coordinate, would be used to calculate fog on the map.
+	 * @param unwrappedTileID - the tile ID
+	 * @private
+	 */
+	calculateFogMatrix(unwrappedTileID: UnwrappedTileID): mat4;
 	customLayerMatrix(): mat4;
 	/**
 	 * Get center lngLat and zoom to ensure that
@@ -4796,6 +4830,51 @@ declare class CullFaceMode {
 	static disabled: Readonly<CullFaceMode>;
 	static backCCW: Readonly<CullFaceMode>;
 }
+export type SkyProps = {
+	"sky-color": DataConstantProperty<Color>;
+	"horizon-color": DataConstantProperty<Color>;
+	"fog-color": DataConstantProperty<Color>;
+	"fog-ground-blend": DataConstantProperty<number>;
+	"horizon-fog-blend": DataConstantProperty<number>;
+	"sky-horizon-blend": DataConstantProperty<number>;
+	"atmosphere-blend": DataConstantProperty<number>;
+};
+export type SkyPropsPossiblyEvaluated = {
+	"sky-color": Color;
+	"horizon-color": Color;
+	"fog-color": Color;
+	"fog-ground-blend": number;
+	"horizon-fog-blend": number;
+	"sky-horizon-blend": number;
+	"atmosphere-blend": number;
+};
+declare class Sky extends Evented {
+	properties: PossiblyEvaluated<SkyProps, SkyPropsPossiblyEvaluated>;
+	/**
+	 * This is used to cache the gl mesh for the sky, it should be initialized only once.
+	 */
+	mesh: Mesh | undefined;
+	_transitionable: Transitionable<SkyProps>;
+	_transitioning: Transitioning<SkyProps>;
+	constructor(sky?: SkySpecification);
+	setSky(sky?: SkySpecification, options?: StyleSetterOptions): void;
+	getSky(): SkySpecification;
+	updateTransitions(parameters: TransitionParameters): void;
+	hasTransition(): boolean;
+	recalculate(parameters: EvaluationParameters): void;
+	_validate(validate: Function, value: unknown, options?: StyleSetterOptions): boolean;
+	/**
+	 * Currently fog is a very simple implementation, and should only used
+	 * to create an atmosphere near the horizon.
+	 * But because the fog is drawn from the far-clipping-plane to
+	 * map-center, and because the fog does nothing know about the horizon,
+	 * this method does a fadeout in respect of pitch. So, when the horizon
+	 * gets out of view, which is at about pitch 70, this methods calculates
+	 * the corresponding opacity values. Below pitch 60 the fog is completely
+	 * invisible.
+	 */
+	calculateFogBlendOpacity(pitch: number): number;
+}
 export type TerrainPreludeUniformsType = {
 	"u_depth": Uniform1i;
 	"u_terrain": Uniform1i;
@@ -5079,22 +5158,22 @@ declare class LightPositionProperty implements Property<[
 	], LightPosition>, parameters: EvaluationParameters): LightPosition;
 	interpolate(a: LightPosition, b: LightPosition, t: number): LightPosition;
 }
-export type Props = {
+export type LightProps = {
 	"anchor": DataConstantProperty<"map" | "viewport">;
 	"position": LightPositionProperty;
 	"color": DataConstantProperty<Color>;
 	"intensity": DataConstantProperty<number>;
 };
-export type PropsPossiblyEvaluated = {
+export type LightPropsPossiblyEvaluated = {
 	"anchor": "map" | "viewport";
 	"position": LightPosition;
 	"color": Color;
 	"intensity": number;
 };
 declare class Light extends Evented {
-	_transitionable: Transitionable<Props>;
-	_transitioning: Transitioning<Props>;
-	properties: PossiblyEvaluated<Props, PropsPossiblyEvaluated>;
+	_transitionable: Transitionable<LightProps>;
+	_transitioning: Transitioning<LightProps>;
+	properties: PossiblyEvaluated<LightProps, LightPropsPossiblyEvaluated>;
 	constructor(lightOptions?: LightSpecification);
 	getLight(): LightSpecification;
 	setLight(light?: LightSpecification, options?: StyleSetterOptions): void;
@@ -5320,11 +5399,11 @@ declare class CollisionIndex {
 	queryRenderedSymbols(viewportQueryGeometry: Array<Point>): {};
 	insertCollisionBox(collisionBox: Array<number>, overlapMode: OverlapMode, ignorePlacement: boolean, bucketInstanceId: number, featureIndex: number, collisionGroupID: number): void;
 	insertCollisionCircles(collisionCircles: Array<number>, overlapMode: OverlapMode, ignorePlacement: boolean, bucketInstanceId: number, featureIndex: number, collisionGroupID: number): void;
-	projectAndGetPerspectiveRatio(posMatrix: mat4, x: number, y: number, unwrappedTileID: UnwrappedTileID, getElevation?: (x: number, y: number) => number): {
+	projectAndGetPerspectiveRatio(posMatrix: mat4, x: number, y: number, _unwrappedTileID: UnwrappedTileID, getElevation?: (x: number, y: number) => number): {
 		point: Point;
 		perspectiveRatio: number;
 		isOccluded: boolean;
-		signedDistanceFromCamera: number;
+		signedDistanceFromCamera: any;
 	};
 	getPerspectiveRatio(posMatrix: mat4, x: number, y: number, unwrappedTileID: UnwrappedTileID, getElevation?: (x: number, y: number) => number): number;
 	isOffscreen(x1: number, y1: number, x2: number, y2: number): boolean;
@@ -5569,6 +5648,37 @@ declare class PauseablePlacement {
 	commit(now: number): Placement;
 }
 /**
+* Input arguments exposed by custom render function.
+*/
+export type CustomRenderMethodInput = {
+	/**
+	 * This value represents the distance from the camera to the far clipping plane.
+	 * It is used in the calculation of the projection matrix to determine which objects are visible.
+	 * farz should be larger than nearZ.
+	 */
+	farZ: number;
+	/**
+	 * This value represents the distance from the camera to the near clipping plane.
+	 * It is used in the calculation of the projection matrix to determine which objects are visible.
+	 * nearZ should be smaller than farZ.
+	 */
+	nearZ: number;
+	/** field of view of camera **/
+	fov: number;
+	/**
+	* model view projection matrix
+	* represents the matrix converting from world space to clip space
+	* https://learnopengl.com/Getting-started/Coordinate-Systems
+	* **/
+	modelViewProjectionMatrix: mat4;
+	/**
+	* projection matrix
+	* represents the matrix converting from view space to clip space
+	* https://learnopengl.com/Getting-started/Coordinate-Systems
+	*/
+	projectionMatrix: mat4;
+};
+/**
  * @param gl - The map's gl context.
  * @param matrix - The map's camera matrix. It projects spherical mercator
  * coordinates to gl clip space coordinates. The spherical mercator coordinate `[0, 0]` represents the
@@ -5576,8 +5686,9 @@ declare class PauseablePlacement {
  * the `renderingMode` is `"3d"`, the z coordinate is conformal. A box with identical x, y, and z
  * lengths in mercator units would be rendered as a cube. {@link MercatorCoordinate.fromLngLat}
  * can be used to project a `LngLat` to a mercator coordinate.
+ * @param options - Argument object with additional render inputs like camera properties.
  */
-export type CustomRenderMethod = (gl: WebGLRenderingContext | WebGL2RenderingContext, matrix: mat4) => void;
+export type CustomRenderMethod = (gl: WebGLRenderingContext | WebGL2RenderingContext, matrix: mat4, options: CustomRenderMethodInput) => void;
 /**
  * Interface for custom style layers. This is a specification for
  * implementers to model: it is not an exported method or class.
@@ -5730,8 +5841,8 @@ export type StyleOptions = {
 	validate?: boolean;
 	/**
 	 * Defines a CSS
-	 * font-family for locally overriding generation of glyphs in the 'CJK Unified Ideographs', 'Hiragana', 'Katakana' and 'Hangul Syllables' ranges.
-	 * In these ranges, font settings from the map's style will be ignored, except for font-weight keywords (light/regular/medium/bold).
+	 * font-family for locally overriding generation of Chinese, Japanese, and Korean characters.
+	 * For these characters, font settings from the map's style will be ignored, except for font-weight keywords (light/regular/medium/bold).
 	 * Set to `false`, to enable font settings from the map's style for these glyph ranges.
 	 * Forces a full update.
 	 */
@@ -5747,14 +5858,16 @@ export type StyleSetterOptions = {
 	validate?: boolean;
 };
 /**
- * Part of {@link Map#setStyle} options, transformStyle is a convenience function that allows to modify a style after it is fetched but before it is committed to the map state
- * this function exposes previous and next styles, it can be commonly used to support a range of functionalities like:
- *      when previous style carries certain 'state' that needs to be carried over to a new style gracefully
- *      when a desired style is a certain combination of previous and incoming style
- *      when an incoming style requires modification based on external state
+ * Part of {@link Map#setStyle} options, transformStyle is a convenience function that allows to modify a style after it is fetched but before it is committed to the map state.
  *
- * @param previousStyle - The current style.
- * @param nextStyle - The next style.
+ * This function exposes previous and next styles, it can be commonly used to support a range of functionalities like:
+ *
+ * - when previous style carries certain 'state' that needs to be carried over to a new style gracefully;
+ * - when a desired style is a certain combination of previous and incoming style;
+ * - when an incoming style requires modification based on external state.
+ *
+ * @param previous - The current style.
+ * @param next - The next style.
  * @returns resulting style that will to be applied to the map
  *
  * @example
@@ -5822,6 +5935,7 @@ export declare class Style extends Evented {
 	glyphManager: GlyphManager;
 	lineAtlas: LineAtlas;
 	light: Light;
+	sky: Sky;
 	_frameRequest: AbortController;
 	_loadStyleRequest: AbortController;
 	_spriteRequest: AbortController;
@@ -5878,6 +5992,7 @@ export declare class Style extends Evented {
 	 * @hidden
 	 * take an array of string IDs, and based on this._layers, generate an array of LayerSpecification
 	 * @param ids - an array of string IDs, for which serialized layers will be generated. If omitted, all serialized layers will be returned
+	 * @param returnClose - if true, return a clone of the layer object
 	 * @returns generated result
 	 */
 	private _serializeByIds;
@@ -5918,7 +6033,7 @@ export declare class Style extends Evented {
 	removeImage(id: string): this;
 	_afterImageUpdated(id: string): void;
 	listImages(): string[];
-	addSource(id: string, source: SourceSpecification, options?: StyleSetterOptions): void;
+	addSource(id: string, source: SourceSpecification | CanvasSourceSpecification, options?: StyleSetterOptions): void;
 	/**
 	 * Remove a source from this stylesheet, given its id.
 	 * @param id - id of the source to remove
@@ -6004,7 +6119,7 @@ export declare class Style extends Evented {
 		duration: number;
 		delay: number;
 	} & import("@maplibre/maplibre-gl-style-spec").TransitionSpecification;
-	serialize(): StyleSpecification;
+	serialize(): StyleSpecification | undefined;
 	_updateLayer(layer: StyleLayer): void;
 	_flattenAndSortRenderedFeatures(sourceResults: Array<{
 		[key: string]: Array<{
@@ -6016,6 +6131,8 @@ export declare class Style extends Evented {
 	querySourceFeatures(sourceID: string, params?: QuerySourceFeatureOptions): any[];
 	getLight(): LightSpecification;
 	setLight(lightOptions: LightSpecification, options?: StyleSetterOptions): void;
+	getSky(): SkySpecification;
+	setSky(skyOptions?: SkySpecification, options?: StyleSetterOptions): void;
 	_validate(validate: Validator, key: string, value: any, props: any, options?: {
 		validate?: boolean;
 	}): boolean;
@@ -6026,8 +6143,8 @@ export declare class Style extends Evented {
 	_generateCollisionBoxes(): void;
 	_updatePlacement(transform: Transform, showCollisionBoxes: boolean, fadeDuration: number, crossSourceCollisions: boolean, forceFullPlacement?: boolean): boolean;
 	_releaseSymbolFadeTiles(): void;
-	getImages(mapId: string | number, params: GetImagesParamerters): Promise<GetImagesResponse>;
-	getGlyphs(mapId: string | number, params: GetGlyphsParamerters): Promise<GetGlyphsResponse>;
+	getImages(mapId: string | number, params: GetImagesParameters): Promise<GetImagesResponse>;
+	getGlyphs(mapId: string | number, params: GetGlyphsParameters): Promise<GetGlyphsResponse>;
 	getGlyphsUrl(): string;
 	setGlyphs(glyphsUrl: string | null, options?: StyleSetterOptions): void;
 	/**
@@ -6330,7 +6447,7 @@ export type UpdateLayersParamaeters = {
 /**
  * Parameters needed to get the images
  */
-export type GetImagesParamerters = {
+export type GetImagesParameters = {
 	icons: Array<string>;
 	source: string;
 	tileID: OverscaledTileID;
@@ -6339,7 +6456,7 @@ export type GetImagesParamerters = {
 /**
  * Parameters needed to get the glyphs
  */
-export type GetGlyphsParamerters = {
+export type GetGlyphsParameters = {
 	type: string;
 	stacks: {
 		[_: string]: Array<number>;
@@ -6426,11 +6543,11 @@ export type RequestResponseMessageMap = {
 		WorkerTileResult
 	];
 	[MessageType.getGlyphs]: [
-		GetGlyphsParamerters,
+		GetGlyphsParameters,
 		GetGlyphsResponse
 	];
 	[MessageType.getImages]: [
-		GetImagesParamerters,
+		GetImagesParameters,
 		GetImagesResponse
 	];
 	[MessageType.setImages]: [
@@ -6617,6 +6734,7 @@ export declare class Hash {
 	_getCurrentHash: () => any;
 	_onHashChange: () => boolean;
 	_updateHashUnthrottled: () => void;
+	_removeHash: () => void;
 	/**
 	 * Mobile Safari doesn't allow updating the hash more than 100 times per 30 seconds.
 	 */
@@ -6689,7 +6807,7 @@ declare class TouchPanHandler implements Handler {
 		clickTolerance: number;
 	}, map: Map$1);
 	reset(): void;
-	minTouchs(): 1 | 2;
+	_shouldBePrevented(touchesCount: number): boolean;
 	touchstart(e: TouchEvent, points: Array<Point>, mapTouches: Array<Touch>): {
 		around: Point;
 		panDelta: Point;
@@ -7460,6 +7578,7 @@ declare abstract class Camera extends Evented {
 	 * @param bounds - Calculate the center for these bounds in the viewport and use
 	 * the highest zoom level up to and including `Map#getMaxZoom()` that fits
 	 * in the viewport. LngLatBounds represent a box that is always axis-aligned with bearing 0.
+	 * Bounds will be taken in [sw, ne] order. Southwest point will always be to the left of the northeast point.
 	 * @param options - Options object
 	 * @returns If map is able to fit to provided bounds, returns `center`, `zoom`, and `bearing`.
 	 * If map is unable to fit, method will warn and return undefined.
@@ -7502,6 +7621,7 @@ declare abstract class Camera extends Evented {
 	 *
 	 * @param bounds - Center these bounds in the viewport and use the highest
 	 * zoom level up to and including `Map#getMaxZoom()` that fits them in the viewport.
+	 * Bounds will be taken in [sw, ne] order. Southwest point will always be to the left of the northeast point.
 	 * @param options - Options supports all properties from {@link AnimationOptions} and {@link CameraOptions} in addition to the fields below.
 	 * @param eventData - Additional properties to be added to event objects of events triggered by this method.
 	 * @example
@@ -7602,7 +7722,8 @@ declare abstract class Camera extends Evented {
 	/**
 	 * @internal
 	 * Called when the camera is about to be manipulated.
-	 * If `transformCameraUpdate` is specified, a copy of the current transform is created to track the accumulated changes.
+	 * If `transformCameraUpdate` is specified or terrain is enabled, a copy of
+	 * the current transform is created to track the accumulated changes.
 	 * This underlying transform represents the "desired state" proposed by input handlers / animations / UI controls.
 	 * It may differ from the state used for rendering (`this.transform`).
 	 * @returns Transform to apply changes to
@@ -7610,8 +7731,24 @@ declare abstract class Camera extends Evented {
 	_getTransformForUpdate(): Transform;
 	/**
 	 * @internal
+	 * Checks the given transform for the camera being below terrain surface and
+	 * returns new pitch and zoom to fix that.
+	 *
+	 * With the new pitch and zoom, the camera will be at the same ground
+	 * position but at higher altitude. It will still point to the same spot on
+	 * the map.
+	 *
+	 * @param tr - The transform to check.
+	 */
+	_elevateCameraIfInsideTerrain(tr: Transform): {
+		pitch?: number;
+		zoom?: number;
+	};
+	/**
+	 * @internal
 	 * Called after the camera is done being manipulated.
 	 * @param tr - the requested camera end state
+	 * If the camera is inside terrain, it gets elevated.
 	 * Call `transformCameraUpdate` if present, and then apply the "approved" changes.
 	 */
 	_applyUpdatedTransform(tr: Transform): void;
@@ -7666,7 +7803,7 @@ declare abstract class Camera extends Evented {
 	}): void;
 	_renderFrameCallback: () => void;
 	_normalizeBearing(bearing: number, currentBearing: number): number;
-	_normalizeCenter(center: LngLat): void;
+	_normalizeCenter(center: LngLat, tr: Transform): void;
 	/**
 	 * Get the elevation difference between a given point
 	 * and a point that is currently in the middle of the screen.
@@ -8144,6 +8281,13 @@ export type MapEventType = {
 	 * Fired when terrain is changed
 	 */
 	terrain: MapTerrainEvent;
+	/**
+	 * Fired whenever the cooperativeGestures option prevents a gesture from being handled by the map.
+	 * This is useful for showing your own UI when this happens.
+	 */
+	cooperativegestureprevented: MapLibreEvent<WheelEvent | TouchEvent> & {
+		gestureType: "wheel_zoom" | "touch_pan";
+	};
 };
 /**
  * The base event for MapLibre
@@ -8718,6 +8862,10 @@ export declare class ScrollZoomHandler implements Handler {
 	 * ```
 	 */
 	disable(): void;
+	/**
+	 * Determines whether or not the gesture is blocked due to cooperativeGestures.
+	 */
+	_shouldBePrevented(e: WheelEvent): boolean;
 	wheel(e: WheelEvent): void;
 	_onTimeout: (initialEvent: MouseEvent) => void;
 	_start(e: MouseEvent): void;
@@ -8851,6 +8999,8 @@ export type GestureOptions = boolean;
 /**
  * A `CooperativeGestureHandler` is a control that adds cooperative gesture info when user tries to zoom in/out.
  *
+ * When the CooperativeGestureHandler blocks a gesture, it will emit a `cooperativegestureprevented` event.
+ *
  * @group Handlers
  *
  * @example
@@ -8859,7 +9009,7 @@ export type GestureOptions = boolean;
  *   cooperativeGestures: true
  * });
  * ```
- * @see [Example: cooperative gestures](https://maplibre.org/maplibre-gl-js-docs/example/cooperative-gestures/)
+ * @see [Example: cooperative gestures](https://maplibre.org/maplibre-gl-js/docs/examples/cooperative-gestures/)
  **/
 export declare class CooperativeGesturesHandler implements Handler {
 	_options: GestureOptions;
@@ -8874,13 +9024,12 @@ export declare class CooperativeGesturesHandler implements Handler {
 	isActive(): boolean;
 	reset(): void;
 	_setupUI(): void;
-	_destoryUI(): void;
+	_destroyUI(): void;
 	enable(): void;
 	disable(): void;
 	isEnabled(): boolean;
-	touchmove(e: TouchEvent): void;
-	wheel(e: WheelEvent): void;
-	_onCooperativeGesture(showNotification: boolean): void;
+	isBypassed(event: MouseEvent | WheelEvent | PointerEvent): boolean;
+	notifyGestureBlocked(gestureType: "wheel_zoom" | "touch_pan", originalEvent: Event$1): void;
 }
 /**
  * The `KeyboardHandler` allows the user to zoom, rotate, and pan the map using
@@ -9394,8 +9543,8 @@ export type MapOptions = {
 	fitBoundsOptions?: FitBoundsOptions;
 	/**
 	 * Defines a CSS
-	 * font-family for locally overriding generation of glyphs in the 'CJK Unified Ideographs', 'Hiragana', 'Katakana' and 'Hangul Syllables' ranges.
-	 * In these ranges, font settings from the map's style will be ignored, except for font-weight keywords (light/regular/medium/bold).
+	 * font-family for locally overriding generation of Chinese, Japanese, and Korean characters.
+	 * For these characters, font settings from the map's style will be ignored, except for font-weight keywords (light/regular/medium/bold).
 	 * Set to `false`, to enable font settings from the map's style for these glyph ranges.
 	 * The purpose of this option is to avoid bandwidth-intensive glyph server requests. (See [Use locally generated ideographs](https://maplibre.org/maplibre-gl-js/docs/examples/local-ideographs).)
 	 * @defaultValue 'sans-serif'
@@ -9441,6 +9590,14 @@ export type MapOptions = {
 	cancelPendingTileRequestsWhileZooming?: boolean;
 };
 export type CompleteMapOptions = Complete<MapOptions>;
+export type DelegatedListener = {
+	layers: string[];
+	listener: Listener;
+	delegates: {
+		[E in keyof MapEventType]?: Delegate<MapEventType[E]>;
+	};
+};
+export type Delegate<E extends Event$1 = Event$1> = (e: E) => void;
 /**
  * The `Map` object represents the map on your page. It exposes methods
  * and properties that enable you to programmatically change the map,
@@ -9503,7 +9660,7 @@ declare class Map$1 extends Camera {
 	_antialias: boolean;
 	_refreshExpiredTiles: boolean;
 	_hash: Hash;
-	_delegatedListeners: any;
+	_delegatedListeners: Record<string, DelegatedListener[]>;
 	_fadeDuration: number;
 	_crossSourceCollisions: boolean;
 	_crossFadingFactor: number;
@@ -9899,16 +10056,12 @@ declare class Map$1 extends Camera {
 	 * ```
 	 */
 	isRotating(): boolean;
-	_createDelegatedListener(type: keyof MapEventType | string, layerId: string, listener: Listener): {
-		layer: string;
-		listener: Listener;
-		delegates: {
-			[type in keyof MapEventType]?: (e: any) => void;
-		};
-	};
+	_createDelegatedListener(type: keyof MapEventType | string, layerIds: string[], listener: Listener): DelegatedListener;
+	_saveDelegatedListener(type: keyof MapEventType | string, delegatedListener: DelegatedListener): void;
+	_removeDelegatedListener(type: string, layerIds: string[], listener: Listener): void;
 	/**
 	 * @event
-	 * Adds a listener for events of a specified type, optionally limited to features in a specified style layer.
+	 * Adds a listener for events of a specified type, optionally limited to features in a specified style layer(s).
 	 * See {@link MapEventType} and {@link MapLayerEventType} for a full list of events and their description.
 	 *
 	 * | Event                  | Compatible with `layerId` |
@@ -10013,6 +10166,14 @@ declare class Map$1 extends Camera {
 	 */
 	on<T extends keyof MapLayerEventType>(type: T, layer: string, listener: (ev: MapLayerEventType[T] & Object) => void): Map$1;
 	/**
+	 * Overload of the `on` method that allows to listen to events specifying multiple layers.
+	 * @event
+	 * @param type - The type of the event.
+	 * @param layerIds - The array of style layer IDs.
+	 * @param listener - The listener callback.
+	 */
+	on<T extends keyof MapLayerEventType>(type: T, layerIds: string[], listener: (ev: MapLayerEventType[T] & Object) => void): this;
+	/**
 	 * Overload of the `on` method that allows to listen to events without specifying a layer.
 	 * @event
 	 * @param type - The type of the event.
@@ -10044,6 +10205,14 @@ declare class Map$1 extends Camera {
 	 */
 	once<T extends keyof MapLayerEventType>(type: T, layer: string, listener?: (ev: MapLayerEventType[T] & Object) => void): this | Promise<MapLayerEventType[T] & Object>;
 	/**
+	 * Overload of the `once` method that allows to listen to events specifying multiple layers.
+	 * @event
+	 * @param type - The type of the event.
+	 * @param layerIds - The array of style layer IDs.
+	 * @param listener - The listener callback.
+	 */
+	once<T extends keyof MapLayerEventType>(type: T, layerIds: string[], listener?: (ev: MapLayerEventType[T] & Object) => void): this | Promise<any>;
+	/**
 	 * Overload of the `once` method that allows to listen to events without specifying a layer.
 	 * @event
 	 * @param type - The type of the event.
@@ -10067,14 +10236,23 @@ declare class Map$1 extends Camera {
 	 */
 	off<T extends keyof MapLayerEventType>(type: T, layer: string, listener: (ev: MapLayerEventType[T] & Object) => void): this;
 	/**
-	 * Overload of the `off` method that allows to listen to events without specifying a layer.
+	 * Overload of the `off` method that allows to remove an event created with multiple layers.
+	 * Provide the same layer IDs as to `on` or `once`, when the listener was registered.
+	 * @event
+	 * @param type - The type of the event.
+	 * @param layers - The layer IDs previously used to install the listener.
+	 * @param listener - The function previously installed as a listener.
+	 */
+	off<T extends keyof MapLayerEventType>(type: T, layers: string[], listener: (ev: MapLayerEventType[T] & Object) => void): this;
+	/**
+	 * Overload of the `off` method that allows to remove an event created without specifying a layer.
 	 * @event
 	 * @param type - The type of the event.
 	 * @param listener - The function previously installed as a listener.
 	 */
 	off<T extends keyof MapEventType>(type: T, listener: (ev: MapEventType[T] & Object) => void): this;
 	/**
-	 * Overload of the `off` method that allows to listen to events without specifying a layer.
+	 * Overload of the `off` method that allows to remove an event created without specifying a layer.
 	 * @event
 	 * @param type - The type of the event.
 	 * @param listener - The function previously installed as a listener.
@@ -10319,7 +10497,7 @@ declare class Map$1 extends Camera {
 	 * ```
 	 * @see GeoJSON source: [Add live realtime data](https://maplibre.org/maplibre-gl-js/docs/examples/live-geojson/)
 	 */
-	addSource(id: string, source: SourceSpecification): this;
+	addSource(id: string, source: SourceSpecification | CanvasSourceSpecification): this;
 	/**
 	 * Returns a Boolean indicating whether the source is loaded. Returns `true` if the source with
 	 * the given ID in the map's style has no outstanding network requests, otherwise `false`.
@@ -10398,7 +10576,7 @@ declare class Map$1 extends Camera {
 	 * @see [Animate a point](https://maplibre.org/maplibre-gl-js/docs/examples/animate-point-along-line/)
 	 * @see [Add live realtime data](https://maplibre.org/maplibre-gl-js/docs/examples/live-geojson/)
 	 */
-	getSource(id: string): Source | undefined;
+	getSource<TSource extends Source>(id: string): TSource | undefined;
 	/**
 	 * Add an image to the style. This image can be displayed on the map like any other icon in the style's
 	 * sprite using the image's ID with
@@ -10858,6 +11036,27 @@ declare class Map$1 extends Camera {
 	 * @returns light Light properties of the style.
 	 */
 	getLight(): LightSpecification;
+	/**
+	 * Loads sky and fog defined by {@link SkySpecification} onto the map.
+	 * Note: The fog only shows when using the terrain 3D feature.
+	 * @param sky - Sky properties to set. Must conform to the [MapLibre Style Specification](https://maplibre.org/maplibre-style-spec/sky/).
+	 * @returns `this`
+	 * @example
+	 * ```ts
+	 * map.setSky({ 'sky-color': '#00f' });
+	 * ```
+	 */
+	setSky(sky: SkySpecification): this;
+	/**
+	 * Returns the value of the sky object.
+	 *
+	 * @returns the sky properties of the style.
+	 * @example
+	 * ```ts
+	 * map.getSky();
+	 * ```
+	 */
+	getSky(): SkySpecification;
 	/**
 	 * Sets the `state` of a feature.
 	 * A feature's `state` is a set of user-defined key-value pairs that are assigned to a feature at runtime.
@@ -11634,6 +11833,12 @@ export type MarkerOptions = {
 	 * @defaultValue 0.2
 	 */
 	opacityWhenCovered?: string;
+	/**
+	  * If `true`, rounding is disabled for placement of the marker, allowing for
+	  * subpixel positioning and smoother movement when the marker is translated.
+	  * @defaultValue false
+	  */
+	subpixelPositioning?: boolean;
 };
 /**
  * Creates a marker component
@@ -11692,6 +11897,7 @@ export declare class Marker extends Evented {
 	_opacity: string;
 	_opacityWhenCovered: string;
 	_opacityTimeout: ReturnType<typeof setTimeout>;
+	_subpixelPositioning: boolean;
 	/**
 	 * @param options - the options
 	 */
@@ -11767,6 +11973,18 @@ export declare class Marker extends Evented {
 	 * @see [Attach a popup to a marker instance](https://maplibre.org/maplibre-gl-js/docs/examples/set-popup/)
 	 */
 	setPopup(popup?: Popup | null): this;
+	/**
+	  * Set the option to allow subpixel positioning of the marker by passing a boolean
+	  *
+	  * @param value - when set to `true`, subpixel positioning is enabled for the marker.
+	  *
+	  * @example
+	  * ```ts
+	  * let marker = new Marker()
+	  * marker.setSubpixelPositioning(true);
+	  * ```
+	  */
+	setSubpixelPositioning(value: boolean): this;
 	_onKeyPress: (e: KeyboardEvent) => void;
 	_onMapClick: (e: MapMouseEvent) => void;
 	/**
@@ -12161,7 +12379,8 @@ export declare class GeolocateControl extends Evented implements IControl {
 	_onZoom: () => void;
 	_onError: (error: GeolocationPositionError) => void;
 	_finish: () => void;
-	_setupUI: (supported: boolean) => void;
+	_setupUI: () => void;
+	_finishSetupUI: (supported: boolean) => void;
 	/**
 	 * Programmatically request and move the map to the user's location.
 	 *
@@ -12482,7 +12701,7 @@ export type SetClusterOptions = {
  * ```
  * @see [Draw GeoJSON points](https://maplibre.org/maplibre-gl-js/docs/examples/geojson-markers/)
  * @see [Add a GeoJSON line](https://maplibre.org/maplibre-gl-js/docs/examples/geojson-line/)
- * @see [Create a heatmap from points](https://maplibre.org/maplibre-gl-js/docs/examples/heatmap/)
+ * @see [Create a heatmap from points](https://maplibre.org/maplibre-gl-js/docs/examples/heatmap-layer/)
  * @see [Create and style clusters](https://maplibre.org/maplibre-gl-js/docs/examples/cluster/)
  */
 export declare class GeoJSONSource extends Evented implements Source {
@@ -12927,7 +13146,7 @@ export declare function removeProtocol(customProtocol: string): void;
  * Necessary for supporting the Arabic and Hebrew languages, which are written right-to-left.
  *
  * @param pluginURL - URL pointing to the Mapbox RTL text plugin source.
- * @param lazy - If set to `true`, mapboxgl will defer loading the plugin until rtl text is encountered,
+ * @param lazy - If set to `true`, maplibre will defer loading the plugin until rtl text is encountered,
  * rtl text will then be rendered only after the plugin finishes loading.
  * @example
  * ```ts
@@ -13066,6 +13285,7 @@ export {
 	RasterDEMSourceSpecification,
 	RasterSourceSpecification,
 	ResolvedImage,
+	SkySpecification,
 	SourceExpression,
 	SourceSpecification,
 	SpriteSpecification,

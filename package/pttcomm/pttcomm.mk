@@ -3,7 +3,7 @@ PTTCOMM_SITE = https://codeberg.org/48554e6d/pttcomm.git
 PTTCOMM_SITE_METHOD = git
 PTTCOMM_DEPENDENCIES = gstreamer1 gst1-plugins-base
 PTTCOMM_PREFIX = $(TARGET_DIR)/usr
-PTTCOMM_LICENSE = gplv3
+PTTCOMM_LICENSE = gplv2
 
 define PTTCOMM_BUILD_CMDS
      $(MAKE) $(TARGET_CONFIGURE_OPTS) -C $(@D)

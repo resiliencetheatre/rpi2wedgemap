@@ -1,6 +1,6 @@
 /**
  * MapLibre GL JS
- * @license 3-Clause BSD. Full text of license: https://github.com/maplibre/maplibre-gl-js/blob/v4.4.0/LICENSE.txt
+ * @license 3-Clause BSD. Full text of license: https://github.com/maplibre/maplibre-gl-js/blob/v4.7.0/LICENSE.txt
  */
 (function (global, factory) {
 typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
@@ -55,7 +55,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
-/* global Reflect, Promise, SuppressedError, Symbol */
+/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
 
 var extendStatics = function(d, b) {
     extendStatics = Object.setPrototypeOf ||
@@ -166,8 +166,8 @@ function __awaiter(thisArg, _arguments, P, generator) {
 }
 
 function __generator(thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -271,7 +271,7 @@ function __await(v) {
 function __asyncGenerator(thisArg, _arguments, generator) {
     if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
     var g = generator.apply(thisArg, _arguments || []), i, q = [];
-    return i = {}, verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+    return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
     function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
     function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
     function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
@@ -370,17 +370,22 @@ function __disposeResources(env) {
         env.error = env.hasError ? new _SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
         env.hasError = true;
     }
+    var r, s = 0;
     function next() {
-        while (env.stack.length) {
-            var rec = env.stack.pop();
+        while (r = env.stack.pop()) {
             try {
-                var result = rec.dispose && rec.dispose.call(rec.value);
-                if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+                if (r.dispose) {
+                    var result = r.dispose.call(r.value);
+                    if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                }
+                else s |= 1;
             }
             catch (e) {
                 fail(e);
             }
         }
+        if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
         if (env.hasError) throw env.error;
     }
     return next();
@@ -1481,6 +1486,16 @@ function subscribe(target, message, listener, options) {
 function degreesToRadians(degrees) {
     return degrees * Math.PI / 180;
 }
+/**
+ * The maximum world tile zoom (Z).
+ * In other words, the upper bound supported for tile zoom.
+ */
+const MAX_TILE_ZOOM = 25;
+/**
+ * The minimum world tile zoom (Z).
+ * In other words, the lower bound supported for tile zoom.
+ */
+const MIN_TILE_ZOOM = 0;
 
 /**
  * An error message to use when an operation is aborted
@@ -7003,14 +7018,26 @@ class IndexOf {
         if (!isValidNativeType(needle, ['boolean', 'string', 'number', 'null'])) {
             throw new RuntimeError(`Expected first argument to be of type boolean, string, number or null, but found ${toString$1(typeOf(needle))} instead.`);
         }
-        if (!isValidNativeType(haystack, ['string', 'array'])) {
-            throw new RuntimeError(`Expected second argument to be of type array or string, but found ${toString$1(typeOf(haystack))} instead.`);
-        }
+        let fromIndex;
         if (this.fromIndex) {
-            const fromIndex = this.fromIndex.evaluate(ctx);
+            fromIndex = this.fromIndex.evaluate(ctx);
+        }
+        if (isValidNativeType(haystack, ['string'])) {
+            const rawIndex = haystack.indexOf(needle, fromIndex);
+            if (rawIndex === -1) {
+                return -1;
+            }
+            else {
+                // The index may be affected by surrogate pairs, so get the length of the preceding substring.
+                return [...haystack.slice(0, rawIndex)].length;
+            }
+        }
+        else if (isValidNativeType(haystack, ['array'])) {
             return haystack.indexOf(needle, fromIndex);
         }
-        return haystack.indexOf(needle);
+        else {
+            throw new RuntimeError(`Expected second argument to be of type array or string, but found ${toString$1(typeOf(haystack))} instead.`);
+        }
     }
     eachChild(fn) {
         fn(this.needle);
@@ -7192,14 +7219,20 @@ class Slice {
     evaluate(ctx) {
         const input = this.input.evaluate(ctx);
         const beginIndex = this.beginIndex.evaluate(ctx);
-        if (!isValidNativeType(input, ['string', 'array'])) {
-            throw new RuntimeError(`Expected first argument to be of type array or string, but found ${toString$1(typeOf(input))} instead.`);
-        }
+        let endIndex;
         if (this.endIndex) {
-            const endIndex = this.endIndex.evaluate(ctx);
+            endIndex = this.endIndex.evaluate(ctx);
+        }
+        if (isValidNativeType(input, ['string'])) {
+            // Indices may be affected by surrogate pairs.
+            return [...input].slice(beginIndex, endIndex).join('');
+        }
+        else if (isValidNativeType(input, ['array'])) {
             return input.slice(beginIndex, endIndex);
         }
-        return input.slice(beginIndex);
+        else {
+            throw new RuntimeError(`Expected first argument to be of type array or string, but found ${toString$1(typeOf(input))} instead.`);
+        }
     }
     eachChild(fn) {
         fn(this.input);
@@ -8160,7 +8193,8 @@ class Length {
     evaluate(ctx) {
         const input = this.input.evaluate(ctx);
         if (typeof input === 'string') {
-            return input.length;
+            // The length may be affected by surrogate pairs.
+            return [...input].length;
         }
         else if (Array.isArray(input)) {
             return input.length;
@@ -8501,7 +8535,7 @@ class Within {
 }
 
 let TinyQueue$1 = class TinyQueue {
-    constructor(data = [], compare = defaultCompare$1) {
+    constructor(data = [], compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0)) {
         this.data = data;
         this.length = this.data.length;
         this.compare = compare;
@@ -8513,8 +8547,7 @@ let TinyQueue$1 = class TinyQueue {
 
     push(item) {
         this.data.push(item);
-        this.length++;
-        this._up(this.length - 1);
+        this._up(this.length++);
     }
 
     pop() {
@@ -8522,9 +8555,8 @@ let TinyQueue$1 = class TinyQueue {
 
         const top = this.data[0];
         const bottom = this.data.pop();
-        this.length--;
 
-        if (this.length > 0) {
+        if (--this.length > 0) {
             this.data[0] = bottom;
             this._down(0);
         }
@@ -8557,30 +8589,24 @@ let TinyQueue$1 = class TinyQueue {
         const item = data[pos];
 
         while (pos < halfLength) {
-            let left = (pos << 1) + 1;
-            let best = data[left];
-            const right = left + 1;
+            let bestChild = (pos << 1) + 1; // initially it is the left child
+            const right = bestChild + 1;
 
-            if (right < this.length && compare(data[right], best) < 0) {
-                left = right;
-                best = data[right];
+            if (right < this.length && compare(data[right], data[bestChild]) < 0) {
+                bestChild = right;
             }
-            if (compare(best, item) >= 0) break;
+            if (compare(data[bestChild], item) >= 0) break;
 
-            data[pos] = best;
-            pos = left;
+            data[pos] = data[bestChild];
+            pos = bestChild;
         }
 
         data[pos] = item;
     }
 };
 
-function defaultCompare$1(a, b) {
-    return a < b ? -1 : a > b ? 1 : 0;
-}
-
 function quickselect(arr, k, left, right, compare) {
-    quickselectStep(arr, k, left , right || (arr.length - 1), compare || defaultCompare$2);
+    quickselectStep(arr, k, left, right || (arr.length - 1), compare || defaultCompare);
 }
 
 function quickselectStep(arr, k, left, right, compare) {
@@ -8629,7 +8655,7 @@ function swap$2(arr, i, j) {
     arr[j] = tmp;
 }
 
-function defaultCompare$2(a, b) {
+function defaultCompare(a, b) {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
@@ -12184,7 +12210,7 @@ function validateLight$1(options) {
     return errors;
 }
 
-function validateSky(options) {
+function validateSky$1(options) {
     const sky = options.value;
     const styleSpec = options.styleSpec;
     const skySpec = styleSpec.sky;
@@ -12410,7 +12436,7 @@ const VALIDATORS = {
     'object': validateObject,
     'source': validateSource$1,
     'light': validateLight$1,
-    'sky': validateSky,
+    'sky': validateSky$1,
     'terrain': validateTerrain$1,
     'projection': validateProjection,
     'string': validateString,
@@ -12516,7 +12542,7 @@ validateStyleMin.source = wrapCleanErrors(injectValidateSpec(validateSource$1));
 validateStyleMin.sprite = wrapCleanErrors(injectValidateSpec(validateSprite));
 validateStyleMin.glyphs = wrapCleanErrors(injectValidateSpec(validateGlyphsUrl));
 validateStyleMin.light = wrapCleanErrors(injectValidateSpec(validateLight$1));
-validateStyleMin.sky = wrapCleanErrors(injectValidateSpec(validateSky));
+validateStyleMin.sky = wrapCleanErrors(injectValidateSpec(validateSky$1));
 validateStyleMin.terrain = wrapCleanErrors(injectValidateSpec(validateTerrain$1));
 validateStyleMin.layer = wrapCleanErrors(injectValidateSpec(validateLayer));
 validateStyleMin.filter = wrapCleanErrors(injectValidateSpec(validateFilter$1));
@@ -12951,6 +12977,7 @@ const visit = { eachLayer, eachProperty, eachSource };
 const validateStyle = validateStyleMin;
 const validateSource = validateStyle.source;
 const validateLight = validateStyle.light;
+const validateSky = validateStyle.sky;
 const validateTerrain = validateStyle.terrain;
 const validateFilter = validateStyle.filter;
 const validatePaintProperty = validateStyle.paintProperty;
@@ -13178,114 +13205,22 @@ function isArrayBuffer(value) {
     return value && typeof ArrayBuffer !== 'undefined' &&
         (value instanceof ArrayBuffer || (value.constructor && value.constructor.name === 'ArrayBuffer'));
 }
-/**
- * Serialize the given object for transfer to or from a web worker.
- *
- * For non-builtin types, recursively serialize each property (possibly
- * omitting certain properties - see register()), and package the result along
- * with the constructor's `name` so that the appropriate constructor can be
- * looked up in `deserialize()`.
- *
- * If a `transferables` array is provided, add any transferable objects (i.e.,
- * any ArrayBuffers or ArrayBuffer views) to the list. (If a copy is needed,
- * this should happen in the client code, before using serialize().)
- */
-function serialize(input, transferables) {
-    if (input === null ||
-        input === undefined ||
-        typeof input === 'boolean' ||
-        typeof input === 'number' ||
-        typeof input === 'string' ||
-        input instanceof Boolean ||
-        input instanceof Number ||
-        input instanceof String ||
-        input instanceof Date ||
-        input instanceof RegExp ||
-        input instanceof Blob ||
-        input instanceof Error) {
-        return input;
-    }
-    if (isArrayBuffer(input)) {
-        if (transferables) {
-            transferables.push(input);
-        }
-        return input;
-    }
-    if (isImageBitmap(input)) {
-        if (transferables) {
-            transferables.push(input);
-        }
-        return input;
-    }
-    if (ArrayBuffer.isView(input)) {
-        const view = input;
-        if (transferables) {
-            transferables.push(view.buffer);
-        }
-        return view;
-    }
-    if (input instanceof ImageData) {
-        if (transferables) {
-            transferables.push(input.data.buffer);
-        }
-        return input;
-    }
-    if (Array.isArray(input)) {
-        const serialized = [];
-        for (const item of input) {
-            serialized.push(serialize(item, transferables));
-        }
-        return serialized;
-    }
-    if (typeof input === 'object') {
-        const klass = input.constructor;
-        const name = klass._classRegistryKey;
-        if (!name) {
-            throw new Error(`can't serialize object of unregistered class ${klass.name}`);
-        }
-        if (!registry[name])
-            throw new Error(`${name} is not registered.`);
-        const properties = klass.serialize ?
-            // (Temporary workaround) allow a class to provide static
-            // `serialize()` and `deserialize()` methods to bypass the generic
-            // approach.
-            // This temporary workaround lets us use the generic serialization
-            // approach for objects whose members include instances of dynamic
-            // StructArray types. Once we refactor StructArray to be static,
-            // we can remove this complexity.
-            klass.serialize(input, transferables) : {};
-        if (!klass.serialize) {
-            for (const key in input) {
-                if (!input.hasOwnProperty(key))
-                    continue; // eslint-disable-line no-prototype-builtins
-                if (registry[name].omit.indexOf(key) >= 0)
-                    continue;
-                const property = input[key];
-                properties[key] = registry[name].shallow.indexOf(key) >= 0 ?
-                    property :
-                    serialize(property, transferables);
-            }
-            if (input instanceof Error) {
-                properties.message = input.message;
-            }
-        }
-        else {
-            if (transferables && properties === transferables[transferables.length - 1]) {
-                throw new Error('statically serialized object won\'t survive transfer of $name property');
-            }
-        }
-        if (properties.$name) {
-            throw new Error('$name property is reserved for worker serialization logic.');
-        }
-        if (name !== 'Object') {
-            properties.$name = name;
-        }
-        return properties;
-    }
-    throw new Error(`can't serialize object of type ${typeof input}`);
+function getClassRegistryKey(input) {
+    const klass = input.constructor;
+    return input.$name || klass._classRegistryKey;
 }
-function deserialize(input) {
-    if (input === null ||
+function isRegistered(input) {
+    if (input === null || typeof input !== 'object') {
+        return false;
+    }
+    const classRegistryKey = getClassRegistryKey(input);
+    if (classRegistryKey && classRegistryKey !== 'Object') {
+        return true;
+    }
+    return false;
+}
+function isSerializeHandledByBuiltin(input) {
+    return (!isRegistered(input) && (input === null ||
         input === undefined ||
         typeof input === 'boolean' ||
         typeof input === 'number' ||
@@ -13300,34 +13235,123 @@ function deserialize(input) {
         isArrayBuffer(input) ||
         isImageBitmap(input) ||
         ArrayBuffer.isView(input) ||
-        input instanceof ImageData) {
+        input instanceof ImageData));
+}
+/**
+ * Serialize the given object for transfer to or from a web worker.
+ *
+ * For non-builtin types, recursively serialize each property (possibly
+ * omitting certain properties - see register()), and package the result along
+ * with the constructor's `name` so that the appropriate constructor can be
+ * looked up in `deserialize()`.
+ *
+ * If a `transferables` array is provided, add any transferable objects (i.e.,
+ * any ArrayBuffers or ArrayBuffer views) to the list. (If a copy is needed,
+ * this should happen in the client code, before using serialize().)
+ */
+function serialize(input, transferables) {
+    if (isSerializeHandledByBuiltin(input)) {
+        if (isArrayBuffer(input) || isImageBitmap(input)) {
+            if (transferables) {
+                transferables.push(input);
+            }
+        }
+        if (ArrayBuffer.isView(input)) {
+            const view = input;
+            if (transferables) {
+                transferables.push(view.buffer);
+            }
+        }
+        if (input instanceof ImageData) {
+            if (transferables) {
+                transferables.push(input.data.buffer);
+            }
+        }
+        return input;
+    }
+    if (Array.isArray(input)) {
+        const serialized = [];
+        for (const item of input) {
+            serialized.push(serialize(item, transferables));
+        }
+        return serialized;
+    }
+    if (typeof input !== 'object') {
+        throw new Error(`can't serialize object of type ${typeof input}`);
+    }
+    const classRegistryKey = getClassRegistryKey(input);
+    if (!classRegistryKey) {
+        throw new Error(`can't serialize object of unregistered class ${input.constructor.name}`);
+    }
+    if (!registry[classRegistryKey])
+        throw new Error(`${classRegistryKey} is not registered.`);
+    const { klass } = registry[classRegistryKey];
+    const properties = klass.serialize ?
+        // (Temporary workaround) allow a class to provide static
+        // `serialize()` and `deserialize()` methods to bypass the generic
+        // approach.
+        // This temporary workaround lets us use the generic serialization
+        // approach for objects whose members include instances of dynamic
+        // StructArray types. Once we refactor StructArray to be static,
+        // we can remove this complexity.
+        klass.serialize(input, transferables) : {};
+    if (!klass.serialize) {
+        for (const key in input) {
+            if (!input.hasOwnProperty(key))
+                continue; // eslint-disable-line no-prototype-builtins
+            if (registry[classRegistryKey].omit.indexOf(key) >= 0)
+                continue;
+            const property = input[key];
+            properties[key] = registry[classRegistryKey].shallow.indexOf(key) >= 0 ?
+                property :
+                serialize(property, transferables);
+        }
+        if (input instanceof Error) {
+            properties.message = input.message;
+        }
+    }
+    else {
+        if (transferables && properties === transferables[transferables.length - 1]) {
+            throw new Error('statically serialized object won\'t survive transfer of $name property');
+        }
+    }
+    if (properties.$name) {
+        throw new Error('$name property is reserved for worker serialization logic.');
+    }
+    if (classRegistryKey !== 'Object') {
+        properties.$name = classRegistryKey;
+    }
+    return properties;
+}
+function deserialize(input) {
+    if (isSerializeHandledByBuiltin(input)) {
         return input;
     }
     if (Array.isArray(input)) {
         return input.map(deserialize);
     }
-    if (typeof input === 'object') {
-        const name = input.$name || 'Object';
-        if (!registry[name]) {
-            throw new Error(`can't deserialize unregistered class ${name}`);
-        }
-        const { klass } = registry[name];
-        if (!klass) {
-            throw new Error(`can't deserialize unregistered class ${name}`);
-        }
-        if (klass.deserialize) {
-            return klass.deserialize(input);
-        }
-        const result = Object.create(klass.prototype);
-        for (const key of Object.keys(input)) {
-            if (key === '$name')
-                continue;
-            const value = input[key];
-            result[key] = registry[name].shallow.indexOf(key) >= 0 ? value : deserialize(value);
-        }
-        return result;
+    if (typeof input !== 'object') {
+        throw new Error(`can't deserialize object of type ${typeof input}`);
     }
-    throw new Error(`can't deserialize object of type ${typeof input}`);
+    const classRegistryKey = getClassRegistryKey(input) || 'Object';
+    if (!registry[classRegistryKey]) {
+        throw new Error(`can't deserialize unregistered class ${classRegistryKey}`);
+    }
+    const { klass } = registry[classRegistryKey];
+    if (!klass) {
+        throw new Error(`can't deserialize unregistered class ${classRegistryKey}`);
+    }
+    if (klass.deserialize) {
+        return klass.deserialize(input);
+    }
+    const result = Object.create(klass.prototype);
+    for (const key of Object.keys(input)) {
+        if (key === '$name')
+            continue;
+        const value = input[key];
+        result[key] = registry[classRegistryKey].shallow.indexOf(key) >= 0 ? value : deserialize(value);
+    }
+    return result;
 }
 
 class ZoomHistory {
@@ -13361,7 +13385,7 @@ class ZoomHistory {
     }
 }
 
-// The following table comes from <https://www.unicode.org/Public/12.0.0/ucd/Blocks.txt>.
+// The following table comes from <https://www.unicode.org/Public/16.0.0/ucd/Blocks.txt>.
 // Keep it synchronized with <https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt>.
 const unicodeBlockLookup = {
     // 'Basic Latin': (char) => char >= 0x0000 && char <= 0x007F,
@@ -13376,15 +13400,16 @@ const unicodeBlockLookup = {
     // 'Cyrillic Supplement': (char) => char >= 0x0500 && char <= 0x052F,
     // 'Armenian': (char) => char >= 0x0530 && char <= 0x058F,
     //'Hebrew': (char) => char >= 0x0590 && char <= 0x05FF,
-    'Arabic': (char) => char >= 0x0600 && char <= 0x06FF,
+    // 'Arabic': (char) => char >= 0x0600 && char <= 0x06FF,
     //'Syriac': (char) => char >= 0x0700 && char <= 0x074F,
-    'Arabic Supplement': (char) => char >= 0x0750 && char <= 0x077F,
+    // 'Arabic Supplement': (char) => char >= 0x0750 && char <= 0x077F,
     // 'Thaana': (char) => char >= 0x0780 && char <= 0x07BF,
     // 'NKo': (char) => char >= 0x07C0 && char <= 0x07FF,
     // 'Samaritan': (char) => char >= 0x0800 && char <= 0x083F,
     // 'Mandaic': (char) => char >= 0x0840 && char <= 0x085F,
     // 'Syriac Supplement': (char) => char >= 0x0860 && char <= 0x086F,
-    'Arabic Extended-A': (char) => char >= 0x08A0 && char <= 0x08FF,
+    // 'Arabic Extended-B': (char) => char >= 0x0870 && char <= 0x089F,
+    // 'Arabic Extended-A': (char) => char >= 0x08A0 && char <= 0x08FF,
     // 'Devanagari': (char) => char >= 0x0900 && char <= 0x097F,
     // 'Bengali': (char) => char >= 0x0980 && char <= 0x09FF,
     // 'Gurmukhi': (char) => char >= 0x0A00 && char <= 0x0A7F,
@@ -13404,7 +13429,7 @@ const unicodeBlockLookup = {
     // 'Ethiopic': (char) => char >= 0x1200 && char <= 0x137F,
     // 'Ethiopic Supplement': (char) => char >= 0x1380 && char <= 0x139F,
     // 'Cherokee': (char) => char >= 0x13A0 && char <= 0x13FF,
-    'Unified Canadian Aboriginal Syllabics': (char) => char >= 0x1400 && char <= 0x167F,
+    // 'Unified Canadian Aboriginal Syllabics': (char) => char >= 0x1400 && char <= 0x167F,
     // 'Ogham': (char) => char >= 0x1680 && char <= 0x169F,
     // 'Runic': (char) => char >= 0x16A0 && char <= 0x16FF,
     // 'Tagalog': (char) => char >= 0x1700 && char <= 0x171F,
@@ -13413,7 +13438,7 @@ const unicodeBlockLookup = {
     // 'Tagbanwa': (char) => char >= 0x1760 && char <= 0x177F,
     'Khmer': (char) => char >= 0x1780 && char <= 0x17FF,
     // 'Mongolian': (char) => char >= 0x1800 && char <= 0x18AF,
-    'Unified Canadian Aboriginal Syllabics Extended': (char) => char >= 0x18B0 && char <= 0x18FF,
+    // 'Unified Canadian Aboriginal Syllabics Extended': (char) => char >= 0x18B0 && char <= 0x18FF,
     // 'Limbu': (char) => char >= 0x1900 && char <= 0x194F,
     // 'Tai Le': (char) => char >= 0x1950 && char <= 0x197F,
     // 'New Tai Lue': (char) => char >= 0x1980 && char <= 0x19DF,
@@ -13467,25 +13492,25 @@ const unicodeBlockLookup = {
     // 'Ethiopic Extended': (char) => char >= 0x2D80 && char <= 0x2DDF,
     // 'Cyrillic Extended-A': (char) => char >= 0x2DE0 && char <= 0x2DFF,
     // 'Supplemental Punctuation': (char) => char >= 0x2E00 && char <= 0x2E7F,
-    'CJK Radicals Supplement': (char) => char >= 0x2E80 && char <= 0x2EFF,
-    'Kangxi Radicals': (char) => char >= 0x2F00 && char <= 0x2FDF,
+    // 'CJK Radicals Supplement': (char) => char >= 0x2E80 && char <= 0x2EFF,
+    // 'Kangxi Radicals': (char) => char >= 0x2F00 && char <= 0x2FDF,
     'Ideographic Description Characters': (char) => char >= 0x2FF0 && char <= 0x2FFF,
     'CJK Symbols and Punctuation': (char) => char >= 0x3000 && char <= 0x303F,
-    'Hiragana': (char) => char >= 0x3040 && char <= 0x309F,
+    // 'Hiragana': (char) => char >= 0x3040 && char <= 0x309F,
     'Katakana': (char) => char >= 0x30A0 && char <= 0x30FF,
-    'Bopomofo': (char) => char >= 0x3100 && char <= 0x312F,
-    'Hangul Compatibility Jamo': (char) => char >= 0x3130 && char <= 0x318F,
+    // 'Bopomofo': (char) => char >= 0x3100 && char <= 0x312F,
+    // 'Hangul Compatibility Jamo': (char) => char >= 0x3130 && char <= 0x318F,
     'Kanbun': (char) => char >= 0x3190 && char <= 0x319F,
-    'Bopomofo Extended': (char) => char >= 0x31A0 && char <= 0x31BF,
+    // 'Bopomofo Extended': (char) => char >= 0x31A0 && char <= 0x31BF,
     'CJK Strokes': (char) => char >= 0x31C0 && char <= 0x31EF,
-    'Katakana Phonetic Extensions': (char) => char >= 0x31F0 && char <= 0x31FF,
+    // 'Katakana Phonetic Extensions': (char) => char >= 0x31F0 && char <= 0x31FF,
     'Enclosed CJK Letters and Months': (char) => char >= 0x3200 && char <= 0x32FF,
     'CJK Compatibility': (char) => char >= 0x3300 && char <= 0x33FF,
-    'CJK Unified Ideographs Extension A': (char) => char >= 0x3400 && char <= 0x4DBF,
+    // 'CJK Unified Ideographs Extension A': (char) => char >= 0x3400 && char <= 0x4DBF,
     'Yijing Hexagram Symbols': (char) => char >= 0x4DC0 && char <= 0x4DFF,
-    'CJK Unified Ideographs': (char) => char >= 0x4E00 && char <= 0x9FFF,
-    'Yi Syllables': (char) => char >= 0xA000 && char <= 0xA48F,
-    'Yi Radicals': (char) => char >= 0xA490 && char <= 0xA4CF,
+    // 'CJK Unified Ideographs': (char) => char >= 0x4E00 && char <= 0x9FFF,
+    // 'Yi Syllables': (char) => char >= 0xA000 && char <= 0xA48F,
+    // 'Yi Radicals': (char) => char >= 0xA490 && char <= 0xA4CF,
     // 'Lisu': (char) => char >= 0xA4D0 && char <= 0xA4FF,
     // 'Vai': (char) => char >= 0xA500 && char <= 0xA63F,
     // 'Cyrillic Extended-B': (char) => char >= 0xA640 && char <= 0xA69F,
@@ -13499,7 +13524,7 @@ const unicodeBlockLookup = {
     // 'Devanagari Extended': (char) => char >= 0xA8E0 && char <= 0xA8FF,
     // 'Kayah Li': (char) => char >= 0xA900 && char <= 0xA92F,
     // 'Rejang': (char) => char >= 0xA930 && char <= 0xA95F,
-    'Hangul Jamo Extended-A': (char) => char >= 0xA960 && char <= 0xA97F,
+    // 'Hangul Jamo Extended-A': (char) => char >= 0xA960 && char <= 0xA97F,
     // 'Javanese': (char) => char >= 0xA980 && char <= 0xA9DF,
     // 'Myanmar Extended-B': (char) => char >= 0xA9E0 && char <= 0xA9FF,
     // 'Cham': (char) => char >= 0xAA00 && char <= 0xAA5F,
@@ -13510,21 +13535,21 @@ const unicodeBlockLookup = {
     // 'Latin Extended-E': (char) => char >= 0xAB30 && char <= 0xAB6F,
     // 'Cherokee Supplement': (char) => char >= 0xAB70 && char <= 0xABBF,
     // 'Meetei Mayek': (char) => char >= 0xABC0 && char <= 0xABFF,
-    'Hangul Syllables': (char) => char >= 0xAC00 && char <= 0xD7AF,
-    'Hangul Jamo Extended-B': (char) => char >= 0xD7B0 && char <= 0xD7FF,
+    // 'Hangul Syllables': (char) => char >= 0xAC00 && char <= 0xD7AF,
+    // 'Hangul Jamo Extended-B': (char) => char >= 0xD7B0 && char <= 0xD7FF,
     // 'High Surrogates': (char) => char >= 0xD800 && char <= 0xDB7F,
     // 'High Private Use Surrogates': (char) => char >= 0xDB80 && char <= 0xDBFF,
     // 'Low Surrogates': (char) => char >= 0xDC00 && char <= 0xDFFF,
     'Private Use Area': (char) => char >= 0xE000 && char <= 0xF8FF,
-    'CJK Compatibility Ideographs': (char) => char >= 0xF900 && char <= 0xFAFF,
+    // 'CJK Compatibility Ideographs': (char) => char >= 0xF900 && char <= 0xFAFF,
     // 'Alphabetic Presentation Forms': (char) => char >= 0xFB00 && char <= 0xFB4F,
-    'Arabic Presentation Forms-A': (char) => char >= 0xFB50 && char <= 0xFDFF,
+    // 'Arabic Presentation Forms-A': (char) => char >= 0xFB50 && char <= 0xFDFF,
     // 'Variation Selectors': (char) => char >= 0xFE00 && char <= 0xFE0F,
     'Vertical Forms': (char) => char >= 0xFE10 && char <= 0xFE1F,
     // 'Combining Half Marks': (char) => char >= 0xFE20 && char <= 0xFE2F,
     'CJK Compatibility Forms': (char) => char >= 0xFE30 && char <= 0xFE4F,
     'Small Form Variants': (char) => char >= 0xFE50 && char <= 0xFE6F,
-    'Arabic Presentation Forms-B': (char) => char >= 0xFE70 && char <= 0xFEFF,
+    // 'Arabic Presentation Forms-B': (char) => char >= 0xFE70 && char <= 0xFEFF,
     'Halfwidth and Fullwidth Forms': (char) => char >= 0xFF00 && char <= 0xFFEF
     // 'Specials': (char) => char >= 0xFFF0 && char <= 0xFFFF,
     // 'Linear B Syllabary': (char) => char >= 0x10000 && char <= 0x1007F,
@@ -13547,7 +13572,10 @@ const unicodeBlockLookup = {
     // 'Osage': (char) => char >= 0x104B0 && char <= 0x104FF,
     // 'Elbasan': (char) => char >= 0x10500 && char <= 0x1052F,
     // 'Caucasian Albanian': (char) => char >= 0x10530 && char <= 0x1056F,
+    // 'Vithkuqi': (char) => char >= 0x10570 && char <= 0x105BF,
+    // 'Todhri': (char) => char >= 0x105C0 && char <= 0x105FF,
     // 'Linear A': (char) => char >= 0x10600 && char <= 0x1077F,
+    // 'Latin Extended-F': (char) => char >= 0x10780 && char <= 0x107BF,
     // 'Cypriot Syllabary': (char) => char >= 0x10800 && char <= 0x1083F,
     // 'Imperial Aramaic': (char) => char >= 0x10840 && char <= 0x1085F,
     // 'Palmyrene': (char) => char >= 0x10860 && char <= 0x1087F,
@@ -13568,9 +13596,14 @@ const unicodeBlockLookup = {
     // 'Old Turkic': (char) => char >= 0x10C00 && char <= 0x10C4F,
     // 'Old Hungarian': (char) => char >= 0x10C80 && char <= 0x10CFF,
     // 'Hanifi Rohingya': (char) => char >= 0x10D00 && char <= 0x10D3F,
+    // 'Garay': (char) => char >= 0x10D40 && char <= 0x10D8F,
     // 'Rumi Numeral Symbols': (char) => char >= 0x10E60 && char <= 0x10E7F,
+    // 'Yezidi': (char) => char >= 0x10E80 && char <= 0x10EBF,
+    // 'Arabic Extended-C': (char) => char >= 0x10EC0 && char <= 0x10EFF,
     // 'Old Sogdian': (char) => char >= 0x10F00 && char <= 0x10F2F,
     // 'Sogdian': (char) => char >= 0x10F30 && char <= 0x10F6F,
+    // 'Old Uyghur': (char) => char >= 0x10F70 && char <= 0x10FAF,
+    // 'Chorasmian': (char) => char >= 0x10FB0 && char <= 0x10FDF,
     // 'Elymaic': (char) => char >= 0x10FE0 && char <= 0x10FFF,
     // 'Brahmi': (char) => char >= 0x11000 && char <= 0x1107F,
     // 'Kaithi': (char) => char >= 0x11080 && char <= 0x110CF,
@@ -13583,57 +13616,82 @@ const unicodeBlockLookup = {
     // 'Multani': (char) => char >= 0x11280 && char <= 0x112AF,
     // 'Khudawadi': (char) => char >= 0x112B0 && char <= 0x112FF,
     // 'Grantha': (char) => char >= 0x11300 && char <= 0x1137F,
+    // 'Tulu-Tigalari': (char) => char >= 0x11380 && char <= 0x113FF,
     // 'Newa': (char) => char >= 0x11400 && char <= 0x1147F,
     // 'Tirhuta': (char) => char >= 0x11480 && char <= 0x114DF,
     // 'Siddham': (char) => char >= 0x11580 && char <= 0x115FF,
     // 'Modi': (char) => char >= 0x11600 && char <= 0x1165F,
     // 'Mongolian Supplement': (char) => char >= 0x11660 && char <= 0x1167F,
     // 'Takri': (char) => char >= 0x11680 && char <= 0x116CF,
-    // 'Ahom': (char) => char >= 0x11700 && char <= 0x1173F,
+    // 'Myanmar Extended-C': (char) => char >= 0x116D0 && char <= 0x116FF,
+    // 'Ahom': (char) => char >= 0x11700 && char <= 0x1174F,
     // 'Dogra': (char) => char >= 0x11800 && char <= 0x1184F,
     // 'Warang Citi': (char) => char >= 0x118A0 && char <= 0x118FF,
+    // 'Dives Akuru': (char) => char >= 0x11900 && char <= 0x1195F,
     // 'Nandinagari': (char) => char >= 0x119A0 && char <= 0x119FF,
     // 'Zanabazar Square': (char) => char >= 0x11A00 && char <= 0x11A4F,
     // 'Soyombo': (char) => char >= 0x11A50 && char <= 0x11AAF,
+    // 'Unified Canadian Aboriginal Syllabics Extended-A': (char) => char >= 0x11AB0 && char <= 0x11ABF,
     // 'Pau Cin Hau': (char) => char >= 0x11AC0 && char <= 0x11AFF,
+    // 'Devanagari Extended-A': (char) => char >= 0x11B00 && char <= 0x11B5F,
+    // 'Sunuwar': (char) => char >= 0x11BC0 && char <= 0x11BFF,
     // 'Bhaiksuki': (char) => char >= 0x11C00 && char <= 0x11C6F,
     // 'Marchen': (char) => char >= 0x11C70 && char <= 0x11CBF,
     // 'Masaram Gondi': (char) => char >= 0x11D00 && char <= 0x11D5F,
     // 'Gunjala Gondi': (char) => char >= 0x11D60 && char <= 0x11DAF,
     // 'Makasar': (char) => char >= 0x11EE0 && char <= 0x11EFF,
+    // 'Kawi': (char) => char >= 0x11F00 && char <= 0x11F5F,
+    // 'Lisu Supplement': (char) => char >= 0x11FB0 && char <= 0x11FBF,
     // 'Tamil Supplement': (char) => char >= 0x11FC0 && char <= 0x11FFF,
     // 'Cuneiform': (char) => char >= 0x12000 && char <= 0x123FF,
     // 'Cuneiform Numbers and Punctuation': (char) => char >= 0x12400 && char <= 0x1247F,
     // 'Early Dynastic Cuneiform': (char) => char >= 0x12480 && char <= 0x1254F,
+    // 'Cypro-Minoan': (char) => char >= 0x12F90 && char <= 0x12FFF,
     // 'Egyptian Hieroglyphs': (char) => char >= 0x13000 && char <= 0x1342F,
-    // 'Egyptian Hieroglyph Format Controls': (char) => char >= 0x13430 && char <= 0x1343F,
+    // 'Egyptian Hieroglyph Format Controls': (char) => char >= 0x13430 && char <= 0x1345F,
+    // 'Egyptian Hieroglyphs Extended-A': (char) => char >= 0x13460 && char <= 0x143FF,
     // 'Anatolian Hieroglyphs': (char) => char >= 0x14400 && char <= 0x1467F,
+    // 'Gurung Khema': (char) => char >= 0x16100 && char <= 0x1613F,
     // 'Bamum Supplement': (char) => char >= 0x16800 && char <= 0x16A3F,
     // 'Mro': (char) => char >= 0x16A40 && char <= 0x16A6F,
+    // 'Tangsa': (char) => char >= 0x16A70 && char <= 0x16ACF,
     // 'Bassa Vah': (char) => char >= 0x16AD0 && char <= 0x16AFF,
     // 'Pahawh Hmong': (char) => char >= 0x16B00 && char <= 0x16B8F,
+    // 'Kirat Rai': (char) => char >= 0x16D40 && char <= 0x16D7F,
     // 'Medefaidrin': (char) => char >= 0x16E40 && char <= 0x16E9F,
     // 'Miao': (char) => char >= 0x16F00 && char <= 0x16F9F,
     // 'Ideographic Symbols and Punctuation': (char) => char >= 0x16FE0 && char <= 0x16FFF,
     // 'Tangut': (char) => char >= 0x17000 && char <= 0x187FF,
     // 'Tangut Components': (char) => char >= 0x18800 && char <= 0x18AFF,
+    // 'Khitan Small Script': (char) => char >= 0x18B00 && char <= 0x18CFF,
+    // 'Tangut Supplement': (char) => char >= 0x18D00 && char <= 0x18D7F,
+    // 'Kana Extended-B': (char) => char >= 0x1AFF0 && char <= 0x1AFFF,
     // 'Kana Supplement': (char) => char >= 0x1B000 && char <= 0x1B0FF,
     // 'Kana Extended-A': (char) => char >= 0x1B100 && char <= 0x1B12F,
     // 'Small Kana Extension': (char) => char >= 0x1B130 && char <= 0x1B16F,
     // 'Nushu': (char) => char >= 0x1B170 && char <= 0x1B2FF,
     // 'Duployan': (char) => char >= 0x1BC00 && char <= 0x1BC9F,
     // 'Shorthand Format Controls': (char) => char >= 0x1BCA0 && char <= 0x1BCAF,
+    // 'Symbols for Legacy Computing Supplement': (char) => char >= 0x1CC00 && char <= 0x1CEBF,
+    // 'Znamenny Musical Notation': (char) => char >= 0x1CF00 && char <= 0x1CFCF,
     // 'Byzantine Musical Symbols': (char) => char >= 0x1D000 && char <= 0x1D0FF,
     // 'Musical Symbols': (char) => char >= 0x1D100 && char <= 0x1D1FF,
     // 'Ancient Greek Musical Notation': (char) => char >= 0x1D200 && char <= 0x1D24F,
+    // 'Kaktovik Numerals': (char) => char >= 0x1D2C0 && char <= 0x1D2DF,
     // 'Mayan Numerals': (char) => char >= 0x1D2E0 && char <= 0x1D2FF,
     // 'Tai Xuan Jing Symbols': (char) => char >= 0x1D300 && char <= 0x1D35F,
     // 'Counting Rod Numerals': (char) => char >= 0x1D360 && char <= 0x1D37F,
     // 'Mathematical Alphanumeric Symbols': (char) => char >= 0x1D400 && char <= 0x1D7FF,
     // 'Sutton SignWriting': (char) => char >= 0x1D800 && char <= 0x1DAAF,
+    // 'Latin Extended-G': (char) => char >= 0x1DF00 && char <= 0x1DFFF,
     // 'Glagolitic Supplement': (char) => char >= 0x1E000 && char <= 0x1E02F,
+    // 'Cyrillic Extended-D': (char) => char >= 0x1E030 && char <= 0x1E08F,
     // 'Nyiakeng Puachue Hmong': (char) => char >= 0x1E100 && char <= 0x1E14F,
+    // 'Toto': (char) => char >= 0x1E290 && char <= 0x1E2BF,
     // 'Wancho': (char) => char >= 0x1E2C0 && char <= 0x1E2FF,
+    // 'Nag Mundari': (char) => char >= 0x1E4D0 && char <= 0x1E4FF,
+    // 'Ol Onal': (char) => char >= 0x1E5D0 && char <= 0x1E5FF,
+    // 'Ethiopic Extended-B': (char) => char >= 0x1E7E0 && char <= 0x1E7FF,
     // 'Mende Kikakui': (char) => char >= 0x1E800 && char <= 0x1E8DF,
     // 'Adlam': (char) => char >= 0x1E900 && char <= 0x1E95F,
     // 'Indic Siyaq Numbers': (char) => char >= 0x1EC70 && char <= 0x1ECBF,
@@ -13654,11 +13712,15 @@ const unicodeBlockLookup = {
     // 'Supplemental Symbols and Pictographs': (char) => char >= 0x1F900 && char <= 0x1F9FF,
     // 'Chess Symbols': (char) => char >= 0x1FA00 && char <= 0x1FA6F,
     // 'Symbols and Pictographs Extended-A': (char) => char >= 0x1FA70 && char <= 0x1FAFF,
+    // 'Symbols for Legacy Computing': (char) => char >= 0x1FB00 && char <= 0x1FBFF,
     // 'CJK Unified Ideographs Extension B': (char) => char >= 0x20000 && char <= 0x2A6DF,
     // 'CJK Unified Ideographs Extension C': (char) => char >= 0x2A700 && char <= 0x2B73F,
     // 'CJK Unified Ideographs Extension D': (char) => char >= 0x2B740 && char <= 0x2B81F,
     // 'CJK Unified Ideographs Extension E': (char) => char >= 0x2B820 && char <= 0x2CEAF,
     // 'CJK Unified Ideographs Extension F': (char) => char >= 0x2CEB0 && char <= 0x2EBEF,
+    // 'CJK Unified Ideographs Extension I': (char) => char >= 0x2EBF0 && char <= 0x2EE5F,
+    // 'CJK Unified Ideographs Extension G': (char) => char >= 0x30000 && char <= 0x3134F,
+    // 'CJK Unified Ideographs Extension H': (char) => char >= 0x31350 && char <= 0x323AF,
     // 'CJK Compatibility Ideographs Supplement': (char) => char >= 0x2F800 && char <= 0x2FA1F,
     // 'Tags': (char) => char >= 0xE0000 && char <= 0xE007F,
     // 'Variation Selectors Supplement': (char) => char >= 0xE0100 && char <= 0xE01EF,
@@ -13688,67 +13750,77 @@ function allowsLetterSpacing(chars) {
     }
     return true;
 }
-function charAllowsLetterSpacing(char) {
-    if (unicodeBlockLookup['Arabic'](char))
-        return false;
-    if (unicodeBlockLookup['Arabic Supplement'](char))
-        return false;
-    if (unicodeBlockLookup['Arabic Extended-A'](char))
-        return false;
-    if (unicodeBlockLookup['Arabic Presentation Forms-A'](char))
-        return false;
-    if (unicodeBlockLookup['Arabic Presentation Forms-B'](char))
-        return false;
-    return true;
+/**
+ * Returns a regular expression matching the given script codes, excluding any
+ * code that the execution environment lacks support for in regular expressions.
+ */
+function sanitizedRegExpFromScriptCodes(scriptCodes) {
+    const supportedPropertyEscapes = scriptCodes.map(code => {
+        try {
+            return new RegExp(`\\p{sc=${code}}`, 'u').source;
+        }
+        catch (e) {
+            return null;
+        }
+    }).filter(pe => pe);
+    return new RegExp(supportedPropertyEscapes.join('|'), 'u');
 }
+/**
+ * ISO 15924 script codes of scripts that disallow letter spacing as of Unicode
+ * 16.0.0.
+ *
+ * In general, cursive scripts are incompatible with letter spacing.
+ */
+const cursiveScriptCodes = [
+    'Arab', // Arabic
+    'Dupl', // Duployan
+    'Mong', // Mongolian
+    'Ougr', // Old Uyghur
+    'Syrc', // Syriac
+];
+const cursiveScriptRegExp = sanitizedRegExpFromScriptCodes(cursiveScriptCodes);
+function charAllowsLetterSpacing(char) {
+    return !cursiveScriptRegExp.test(String.fromCodePoint(char));
+}
+/**
+ * ISO 15924 script codes of scripts that allow ideographic line breaking beyond
+ * the CJKV scripts that are considered ideographic in Unicode 16.0.0.
+ */
+const ideographicBreakingScriptCodes = [
+    'Bopo', // Bopomofo
+    'Hani', // Han
+    'Hira', // Hiragana
+    'Kana', // Katakana
+    'Kits', // Khitan Small Script
+    'Nshu', // Nushu
+    'Tang', // Tangut
+    'Yiii', // Yi
+];
+const ideographicBreakingRegExp = sanitizedRegExpFromScriptCodes(ideographicBreakingScriptCodes);
 function charAllowsIdeographicBreaking(char) {
     // Return early for characters outside all ideographic ranges.
     if (char < 0x2E80)
         return false;
-    if (unicodeBlockLookup['Bopomofo Extended'](char))
-        return true;
-    if (unicodeBlockLookup['Bopomofo'](char))
-        return true;
     if (unicodeBlockLookup['CJK Compatibility Forms'](char))
         return true;
-    if (unicodeBlockLookup['CJK Compatibility Ideographs'](char))
-        return true;
     if (unicodeBlockLookup['CJK Compatibility'](char))
-        return true;
-    if (unicodeBlockLookup['CJK Radicals Supplement'](char))
         return true;
     if (unicodeBlockLookup['CJK Strokes'](char))
         return true;
     if (unicodeBlockLookup['CJK Symbols and Punctuation'](char))
         return true;
-    if (unicodeBlockLookup['CJK Unified Ideographs Extension A'](char))
-        return true;
-    if (unicodeBlockLookup['CJK Unified Ideographs'](char))
-        return true;
     if (unicodeBlockLookup['Enclosed CJK Letters and Months'](char))
         return true;
     if (unicodeBlockLookup['Halfwidth and Fullwidth Forms'](char))
         return true;
-    if (unicodeBlockLookup['Hiragana'](char))
-        return true;
     if (unicodeBlockLookup['Ideographic Description Characters'](char))
-        return true;
-    if (unicodeBlockLookup['Kangxi Radicals'](char))
-        return true;
-    if (unicodeBlockLookup['Katakana Phonetic Extensions'](char))
-        return true;
-    if (unicodeBlockLookup['Katakana'](char))
         return true;
     if (unicodeBlockLookup['Vertical Forms'](char))
         return true;
-    if (unicodeBlockLookup['Yi Radicals'](char))
-        return true;
-    if (unicodeBlockLookup['Yi Syllables'](char))
-        return true;
-    return false;
+    return ideographicBreakingRegExp.test(String.fromCodePoint(char));
 }
 // The following logic comes from
-// <https://www.unicode.org/Public/12.0.0/ucd/VerticalOrientation.txt>.
+// <https://www.unicode.org/Public/16.0.0/ucd/VerticalOrientation.txt>.
 // Keep it synchronized with
 // <https://www.unicode.org/Public/UCD/latest/ucd/VerticalOrientation.txt>.
 // The data file denotes with “U” or “Tu” any codepoint that may be drawn
@@ -13775,20 +13847,12 @@ function charHasUprightVerticalOrientation(char) {
     // upright in vertical writing mode.
     if (char < 0x1100)
         return false;
-    if (unicodeBlockLookup['Bopomofo Extended'](char))
-        return true;
-    if (unicodeBlockLookup['Bopomofo'](char))
-        return true;
     if (unicodeBlockLookup['CJK Compatibility Forms'](char)) {
         if (!((char >= 0xFE49 /* dashed overline */ && char <= 0xFE4F) /* wavy low line */)) {
             return true;
         }
     }
-    if (unicodeBlockLookup['CJK Compatibility Ideographs'](char))
-        return true;
     if (unicodeBlockLookup['CJK Compatibility'](char))
-        return true;
-    if (unicodeBlockLookup['CJK Radicals Supplement'](char))
         return true;
     if (unicodeBlockLookup['CJK Strokes'](char))
         return true;
@@ -13799,31 +13863,11 @@ function charHasUprightVerticalOrientation(char) {
             return true;
         }
     }
-    if (unicodeBlockLookup['CJK Unified Ideographs Extension A'](char))
-        return true;
-    if (unicodeBlockLookup['CJK Unified Ideographs'](char))
-        return true;
     if (unicodeBlockLookup['Enclosed CJK Letters and Months'](char))
-        return true;
-    if (unicodeBlockLookup['Hangul Compatibility Jamo'](char))
-        return true;
-    if (unicodeBlockLookup['Hangul Jamo Extended-A'](char))
-        return true;
-    if (unicodeBlockLookup['Hangul Jamo Extended-B'](char))
-        return true;
-    if (unicodeBlockLookup['Hangul Jamo'](char))
-        return true;
-    if (unicodeBlockLookup['Hangul Syllables'](char))
-        return true;
-    if (unicodeBlockLookup['Hiragana'](char))
         return true;
     if (unicodeBlockLookup['Ideographic Description Characters'](char))
         return true;
     if (unicodeBlockLookup['Kanbun'](char))
-        return true;
-    if (unicodeBlockLookup['Kangxi Radicals'](char))
-        return true;
-    if (unicodeBlockLookup['Katakana Phonetic Extensions'](char))
         return true;
     if (unicodeBlockLookup['Katakana'](char)) {
         if (char !== 0x30FC /* katakana-hiragana prolonged sound mark */) {
@@ -13850,17 +13894,15 @@ function charHasUprightVerticalOrientation(char) {
             return true;
         }
     }
-    if (unicodeBlockLookup['Unified Canadian Aboriginal Syllabics'](char))
-        return true;
-    if (unicodeBlockLookup['Unified Canadian Aboriginal Syllabics Extended'](char))
-        return true;
     if (unicodeBlockLookup['Vertical Forms'](char))
         return true;
     if (unicodeBlockLookup['Yijing Hexagram Symbols'](char))
         return true;
-    if (unicodeBlockLookup['Yi Syllables'](char))
+    if ( /* Canadian Aboriginal *//\p{sc=Cans}/u.test(String.fromCodePoint(char)))
         return true;
-    if (unicodeBlockLookup['Yi Radicals'](char))
+    if ( /* Hangul *//\p{sc=Hang}/u.test(String.fromCodePoint(char)))
+        return true;
+    if (ideographicBreakingRegExp.test(String.fromCodePoint(char)))
         return true;
     return false;
 }
@@ -13979,17 +14021,53 @@ function charHasRotatedVerticalOrientation(char) {
         charHasNeutralVerticalOrientation(char));
 }
 function charInComplexShapingScript(char) {
-    return unicodeBlockLookup['Arabic'](char) ||
-        unicodeBlockLookup['Arabic Supplement'](char) ||
-        unicodeBlockLookup['Arabic Extended-A'](char) ||
-        unicodeBlockLookup['Arabic Presentation Forms-A'](char) ||
-        unicodeBlockLookup['Arabic Presentation Forms-B'](char);
+    return /\p{sc=Arab}/u.test(String.fromCodePoint(char));
 }
+/**
+ * ISO 15924 script codes of scripts that are primarily written horizontally
+ * right-to-left according to Unicode 16.0.0.
+ */
+const rtlScriptCodes = [
+    'Adlm', // Adlam
+    'Arab', // Arabic
+    'Armi', // Imperial Aramaic
+    'Avst', // Avestan
+    'Chrs', // Chorasmian
+    'Cprt', // Cypriot
+    'Egyp', // Egyptian Hieroglyphs
+    'Elym', // Elymaic
+    'Gara', // Garay
+    'Hatr', // Hatran
+    'Hebr', // Hebrew
+    'Hung', // Old Hungarian
+    'Khar', // Kharoshthi
+    'Lydi', // Lydian
+    'Mand', // Mandaic
+    'Mani', // Manichaean
+    'Mend', // Mende Kikakui
+    'Merc', // Meroitic Cursive
+    'Mero', // Meroitic Hieroglyphs
+    'Narb', // Old North Arabian
+    'Nbat', // Nabataean
+    'Nkoo', // NKo
+    'Orkh', // Old Turkic
+    'Palm', // Palmyrene
+    'Phli', // Inscriptional Pahlavi
+    'Phlp', // Psalter Pahlavi
+    'Phnx', // Phoenician
+    'Prti', // Inscriptional Parthian
+    'Rohg', // Hanifi Rohingya
+    'Samr', // Samaritan
+    'Sarb', // Old South Arabian
+    'Sogo', // Old Sogdian
+    'Syrc', // Syriac
+    'Thaa', // Thaana
+    'Todr', // Todhri
+    'Yezi', // Yezidi
+];
+const rtlScriptRegExp = sanitizedRegExpFromScriptCodes(rtlScriptCodes);
 function charInRTLScript(char) {
-    // Main blocks for Hebrew, Arabic, Thaana and other RTL scripts
-    return (char >= 0x0590 && char <= 0x08FF) ||
-        unicodeBlockLookup['Arabic Presentation Forms-A'](char) ||
-        unicodeBlockLookup['Arabic Presentation Forms-B'](char);
+    return rtlScriptRegExp.test(String.fromCodePoint(char));
 }
 function charInSupportedScript(char, canRenderRTL) {
     // This is a rough heuristic: whether we "can render" a script
@@ -14948,7 +15026,7 @@ function align$1(offset, size) {
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[2]
+ * [0] - Int16[2]
  *
  */
 class StructArrayLayout2i4 extends StructArray {
@@ -14973,7 +15051,7 @@ register('StructArrayLayout2i4', StructArrayLayout2i4);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[3]
+ * [0] - Int16[3]
  *
  */
 class StructArrayLayout3i6 extends StructArray {
@@ -14999,7 +15077,7 @@ register('StructArrayLayout3i6', StructArrayLayout3i6);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[4]
+ * [0] - Int16[4]
  *
  */
 class StructArrayLayout4i8 extends StructArray {
@@ -15026,8 +15104,8 @@ register('StructArrayLayout4i8', StructArrayLayout4i8);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[2]
- * [4]: Int16[4]
+ * [0] - Int16[2]
+ * [4] - Int16[4]
  *
  */
 class StructArrayLayout2i4i12 extends StructArray {
@@ -15056,8 +15134,8 @@ register('StructArrayLayout2i4i12', StructArrayLayout2i4i12);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[2]
- * [4]: Uint8[4]
+ * [0] - Int16[2]
+ * [4] - Uint8[4]
  *
  */
 class StructArrayLayout2i4ub8 extends StructArray {
@@ -15087,7 +15165,7 @@ register('StructArrayLayout2i4ub8', StructArrayLayout2i4ub8);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Float32[2]
+ * [0] - Float32[2]
  *
  */
 class StructArrayLayout2f8 extends StructArray {
@@ -15112,7 +15190,7 @@ register('StructArrayLayout2f8', StructArrayLayout2f8);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint16[10]
+ * [0] - Uint16[10]
  *
  */
 class StructArrayLayout10ui20 extends StructArray {
@@ -15145,9 +15223,9 @@ register('StructArrayLayout10ui20', StructArrayLayout10ui20);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[4]
- * [8]: Uint16[4]
- * [16]: Int16[4]
+ * [0] - Int16[4]
+ * [8] - Uint16[4]
+ * [16] - Int16[4]
  *
  */
 class StructArrayLayout4i4ui4i24 extends StructArray {
@@ -15183,7 +15261,7 @@ register('StructArrayLayout4i4ui4i24', StructArrayLayout4i4ui4i24);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Float32[3]
+ * [0] - Float32[3]
  *
  */
 class StructArrayLayout3f12 extends StructArray {
@@ -15209,7 +15287,7 @@ register('StructArrayLayout3f12', StructArrayLayout3f12);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint32[1]
+ * [0] - Uint32[1]
  *
  */
 class StructArrayLayout1ul4 extends StructArray {
@@ -15233,9 +15311,9 @@ register('StructArrayLayout1ul4', StructArrayLayout1ul4);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[6]
- * [12]: Uint32[1]
- * [16]: Uint16[2]
+ * [0] - Int16[6]
+ * [12] - Uint32[1]
+ * [16] - Uint16[2]
  *
  */
 class StructArrayLayout6i1ul2ui20 extends StructArray {
@@ -15270,9 +15348,9 @@ register('StructArrayLayout6i1ul2ui20', StructArrayLayout6i1ul2ui20);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[2]
- * [4]: Int16[2]
- * [8]: Int16[2]
+ * [0] - Int16[2]
+ * [4] - Int16[2]
+ * [8] - Int16[2]
  *
  */
 class StructArrayLayout2i2i2i12 extends StructArray {
@@ -15301,9 +15379,9 @@ register('StructArrayLayout2i2i2i12', StructArrayLayout2i2i2i12);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Float32[2]
- * [8]: Float32[1]
- * [12]: Int16[2]
+ * [0] - Float32[2]
+ * [8] - Float32[1]
+ * [12] - Int16[2]
  *
  */
 class StructArrayLayout2f1f2i16 extends StructArray {
@@ -15333,9 +15411,9 @@ register('StructArrayLayout2f1f2i16', StructArrayLayout2f1f2i16);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint8[2]
- * [4]: Float32[2]
- * [12]: Int16[2]
+ * [0] - Uint8[2]
+ * [4] - Float32[2]
+ * [12] - Int16[2]
  *
  */
 class StructArrayLayout2ub2f2i16 extends StructArray {
@@ -15367,7 +15445,7 @@ register('StructArrayLayout2ub2f2i16', StructArrayLayout2ub2f2i16);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint16[3]
+ * [0] - Uint16[3]
  *
  */
 class StructArrayLayout3ui6 extends StructArray {
@@ -15393,14 +15471,14 @@ register('StructArrayLayout3ui6', StructArrayLayout3ui6);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[2]
- * [4]: Uint16[2]
- * [8]: Uint32[3]
- * [20]: Uint16[3]
- * [28]: Float32[2]
- * [36]: Uint8[3]
- * [40]: Uint32[1]
- * [44]: Int16[1]
+ * [0] - Int16[2]
+ * [4] - Uint16[2]
+ * [8] - Uint32[3]
+ * [20] - Uint16[3]
+ * [28] - Float32[2]
+ * [36] - Uint8[3]
+ * [40] - Uint32[1]
+ * [44] - Int16[1]
  *
  */
 class StructArrayLayout2i2ui3ul3ui2f3ub1ul1i48 extends StructArray {
@@ -15445,11 +15523,11 @@ register('StructArrayLayout2i2ui3ul3ui2f3ub1ul1i48', StructArrayLayout2i2ui3ul3u
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Int16[8]
- * [16]: Uint16[15]
- * [48]: Uint32[1]
- * [52]: Float32[2]
- * [60]: Uint16[2]
+ * [0] - Int16[8]
+ * [16] - Uint16[15]
+ * [48] - Uint32[1]
+ * [52] - Float32[2]
+ * [60] - Uint16[2]
  *
  */
 class StructArrayLayout8i15ui1ul2f2ui64 extends StructArray {
@@ -15504,7 +15582,7 @@ register('StructArrayLayout8i15ui1ul2f2ui64', StructArrayLayout8i15ui1ul2f2ui64)
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Float32[1]
+ * [0] - Float32[1]
  *
  */
 class StructArrayLayout1f4 extends StructArray {
@@ -15528,8 +15606,8 @@ register('StructArrayLayout1f4', StructArrayLayout1f4);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint16[1]
- * [4]: Float32[2]
+ * [0] - Uint16[1]
+ * [4] - Float32[2]
  *
  */
 class StructArrayLayout1ui2f12 extends StructArray {
@@ -15557,8 +15635,8 @@ register('StructArrayLayout1ui2f12', StructArrayLayout1ui2f12);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint32[1]
- * [4]: Uint16[2]
+ * [0] - Uint32[1]
+ * [4] - Uint16[2]
  *
  */
 class StructArrayLayout1ul2ui8 extends StructArray {
@@ -15586,7 +15664,7 @@ register('StructArrayLayout1ul2ui8', StructArrayLayout1ul2ui8);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint16[2]
+ * [0] - Uint16[2]
  *
  */
 class StructArrayLayout2ui4 extends StructArray {
@@ -15611,7 +15689,7 @@ register('StructArrayLayout2ui4', StructArrayLayout2ui4);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Uint16[1]
+ * [0] - Uint16[1]
  *
  */
 class StructArrayLayout1ui2 extends StructArray {
@@ -15635,7 +15713,7 @@ register('StructArrayLayout1ui2', StructArrayLayout1ui2);
 /**
  * @internal
  * Implementation of the StructArray layout:
- * [0]: Float32[4]
+ * [0] - Float32[4]
  *
  */
 class StructArrayLayout4f16 extends StructArray {
@@ -25129,6 +25207,7 @@ function renderColorRamp(params) {
     return image;
 }
 
+const HEATMAP_FULL_RENDER_FBO_KEY = 'big-fb';
 /**
  * A style layer that defines a heatmap
  */
@@ -25138,6 +25217,7 @@ class HeatmapStyleLayer extends StyleLayer {
     }
     constructor(layer) {
         super(layer, properties$7);
+        this.heatmapFbos = new Map();
         // make sure color ramp texture is generated for default heatmap color too
         this._updateColorRamp();
     }
@@ -25156,9 +25236,8 @@ class HeatmapStyleLayer extends StyleLayer {
         this.colorRampTexture = null;
     }
     resize() {
-        if (this.heatmapFbo) {
-            this.heatmapFbo.destroy();
-            this.heatmapFbo = null;
+        if (this.heatmapFbos.has(HEATMAP_FULL_RENDER_FBO_KEY)) {
+            this.heatmapFbos.delete(HEATMAP_FULL_RENDER_FBO_KEY);
         }
     }
     queryRadius() {
@@ -25199,38 +25278,29 @@ const layout$4 = createLayout([
 ], 4);
 const { members: members$3, size: size$3, alignment: alignment$3 } = layout$4;
 
-var earcut$2 = {exports: {}};
+function earcut(data, holeIndices, dim = 2) {
 
-var earcut_1 = earcut$2.exports;
-
-'use strict';
-
-earcut$2.exports = earcut;
-var _default = earcut$2.exports.default = earcut;
-
-function earcut(data, holeIndices, dim) {
-
-    dim = dim || 2;
-
-    var hasHoles = holeIndices && holeIndices.length,
-        outerLen = hasHoles ? holeIndices[0] * dim : data.length,
-        outerNode = linkedList(data, 0, outerLen, dim, true),
-        triangles = [];
+    const hasHoles = holeIndices && holeIndices.length;
+    const outerLen = hasHoles ? holeIndices[0] * dim : data.length;
+    let outerNode = linkedList(data, 0, outerLen, dim, true);
+    const triangles = [];
 
     if (!outerNode || outerNode.next === outerNode.prev) return triangles;
 
-    var minX, minY, maxX, maxY, x, y, invSize;
+    let minX, minY, invSize;
 
     if (hasHoles) outerNode = eliminateHoles(data, holeIndices, outerNode, dim);
 
     // if the shape is not too simple, we'll use z-order curve hash later; calculate polygon bbox
     if (data.length > 80 * dim) {
-        minX = maxX = data[0];
-        minY = maxY = data[1];
+        minX = Infinity;
+        minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
 
-        for (var i = dim; i < outerLen; i += dim) {
-            x = data[i];
-            y = data[i + 1];
+        for (let i = dim; i < outerLen; i += dim) {
+            const x = data[i];
+            const y = data[i + 1];
             if (x < minX) minX = x;
             if (y < minY) minY = y;
             if (x > maxX) maxX = x;
@@ -25249,12 +25319,12 @@ function earcut(data, holeIndices, dim) {
 
 // create a circular doubly linked list from polygon points in the specified winding order
 function linkedList(data, start, end, dim, clockwise) {
-    var i, last;
+    let last;
 
     if (clockwise === (signedArea$1(data, start, end, dim) > 0)) {
-        for (i = start; i < end; i += dim) last = insertNode(i, data[i], data[i + 1], last);
+        for (let i = start; i < end; i += dim) last = insertNode(i / dim | 0, data[i], data[i + 1], last);
     } else {
-        for (i = end - dim; i >= start; i -= dim) last = insertNode(i, data[i], data[i + 1], last);
+        for (let i = end - dim; i >= start; i -= dim) last = insertNode(i / dim | 0, data[i], data[i + 1], last);
     }
 
     if (last && equals(last, last.next)) {
@@ -25270,7 +25340,7 @@ function filterPoints(start, end) {
     if (!start) return start;
     if (!end) end = start;
 
-    var p = start,
+    let p = start,
         again;
     do {
         again = false;
@@ -25296,19 +25366,15 @@ function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
     // interlink polygon nodes in z-order
     if (!pass && invSize) indexCurve(ear, minX, minY, invSize);
 
-    var stop = ear,
-        prev, next;
+    let stop = ear;
 
     // iterate through ears, slicing them one by one
     while (ear.prev !== ear.next) {
-        prev = ear.prev;
-        next = ear.next;
+        const prev = ear.prev;
+        const next = ear.next;
 
         if (invSize ? isEarHashed(ear, minX, minY, invSize) : isEar(ear)) {
-            // cut off the triangle
-            triangles.push(prev.i / dim | 0);
-            triangles.push(ear.i / dim | 0);
-            triangles.push(next.i / dim | 0);
+            triangles.push(prev.i, ear.i, next.i); // cut off the triangle
 
             removeNode(ear);
 
@@ -25329,7 +25395,7 @@ function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
 
             // if this didn't work, try curing all small self-intersections locally
             } else if (pass === 1) {
-                ear = cureLocalIntersections(filterPoints(ear), triangles, dim);
+                ear = cureLocalIntersections(filterPoints(ear), triangles);
                 earcutLinked(ear, triangles, dim, minX, minY, invSize, 2);
 
             // as a last resort, try splitting the remaining polygon into two
@@ -25344,22 +25410,22 @@ function earcutLinked(ear, triangles, dim, minX, minY, invSize, pass) {
 
 // check whether a polygon node forms a valid ear with adjacent nodes
 function isEar(ear) {
-    var a = ear.prev,
+    const a = ear.prev,
         b = ear,
         c = ear.next;
 
     if (area(a, b, c) >= 0) return false; // reflex, can't be an ear
 
     // now make sure we don't have other points inside the potential ear
-    var ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+    const ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
 
     // triangle bbox; min & max are calculated like this for speed
-    var x0 = ax < bx ? (ax < cx ? ax : cx) : (bx < cx ? bx : cx),
+    const x0 = ax < bx ? (ax < cx ? ax : cx) : (bx < cx ? bx : cx),
         y0 = ay < by ? (ay < cy ? ay : cy) : (by < cy ? by : cy),
         x1 = ax > bx ? (ax > cx ? ax : cx) : (bx > cx ? bx : cx),
         y1 = ay > by ? (ay > cy ? ay : cy) : (by > cy ? by : cy);
 
-    var p = c.next;
+    let p = c.next;
     while (p !== a) {
         if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 &&
             pointInTriangle(ax, ay, bx, by, cx, cy, p.x, p.y) &&
@@ -25371,25 +25437,25 @@ function isEar(ear) {
 }
 
 function isEarHashed(ear, minX, minY, invSize) {
-    var a = ear.prev,
+    const a = ear.prev,
         b = ear,
         c = ear.next;
 
     if (area(a, b, c) >= 0) return false; // reflex, can't be an ear
 
-    var ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
+    const ax = a.x, bx = b.x, cx = c.x, ay = a.y, by = b.y, cy = c.y;
 
     // triangle bbox; min & max are calculated like this for speed
-    var x0 = ax < bx ? (ax < cx ? ax : cx) : (bx < cx ? bx : cx),
+    const x0 = ax < bx ? (ax < cx ? ax : cx) : (bx < cx ? bx : cx),
         y0 = ay < by ? (ay < cy ? ay : cy) : (by < cy ? by : cy),
         x1 = ax > bx ? (ax > cx ? ax : cx) : (bx > cx ? bx : cx),
         y1 = ay > by ? (ay > cy ? ay : cy) : (by > cy ? by : cy);
 
     // z-order range for the current triangle bbox;
-    var minZ = zOrder(x0, y0, minX, minY, invSize),
+    const minZ = zOrder(x0, y0, minX, minY, invSize),
         maxZ = zOrder(x1, y1, minX, minY, invSize);
 
-    var p = ear.prevZ,
+    let p = ear.prevZ,
         n = ear.nextZ;
 
     // look for points inside the triangle in both directions
@@ -25421,17 +25487,15 @@ function isEarHashed(ear, minX, minY, invSize) {
 }
 
 // go through all polygon nodes and cure small local self-intersections
-function cureLocalIntersections(start, triangles, dim) {
-    var p = start;
+function cureLocalIntersections(start, triangles) {
+    let p = start;
     do {
-        var a = p.prev,
+        const a = p.prev,
             b = p.next.next;
 
         if (!equals(a, b) && intersects(a, p, p.next, b) && locallyInside(a, b) && locallyInside(b, a)) {
 
-            triangles.push(a.i / dim | 0);
-            triangles.push(p.i / dim | 0);
-            triangles.push(b.i / dim | 0);
+            triangles.push(a.i, p.i, b.i);
 
             // remove two nodes involved
             removeNode(p);
@@ -25448,13 +25512,13 @@ function cureLocalIntersections(start, triangles, dim) {
 // try splitting polygon into two and triangulate them independently
 function splitEarcut(start, triangles, dim, minX, minY, invSize) {
     // look for a valid diagonal that divides the polygon into two
-    var a = start;
+    let a = start;
     do {
-        var b = a.next.next;
+        let b = a.next.next;
         while (b !== a.prev) {
             if (a.i !== b.i && isValidDiagonal(a, b)) {
                 // split the polygon in two by the diagonal
-                var c = splitPolygon(a, b);
+                let c = splitPolygon(a, b);
 
                 // filter colinear points around the cuts
                 a = filterPoints(a, a.next);
@@ -25473,13 +25537,12 @@ function splitEarcut(start, triangles, dim, minX, minY, invSize) {
 
 // link every hole into the outer loop, producing a single-ring polygon without holes
 function eliminateHoles(data, holeIndices, outerNode, dim) {
-    var queue = [],
-        i, len, start, end, list;
+    const queue = [];
 
-    for (i = 0, len = holeIndices.length; i < len; i++) {
-        start = holeIndices[i] * dim;
-        end = i < len - 1 ? holeIndices[i + 1] * dim : data.length;
-        list = linkedList(data, start, end, dim, false);
+    for (let i = 0, len = holeIndices.length; i < len; i++) {
+        const start = holeIndices[i] * dim;
+        const end = i < len - 1 ? holeIndices[i + 1] * dim : data.length;
+        const list = linkedList(data, start, end, dim, false);
         if (list === list.next) list.steiner = true;
         queue.push(getLeftmost(list));
     }
@@ -25487,7 +25550,7 @@ function eliminateHoles(data, holeIndices, outerNode, dim) {
     queue.sort(compareX);
 
     // process holes from left to right
-    for (i = 0; i < queue.length; i++) {
+    for (let i = 0; i < queue.length; i++) {
         outerNode = eliminateHole(queue[i], outerNode);
     }
 
@@ -25500,12 +25563,12 @@ function compareX(a, b) {
 
 // find a bridge between vertices that connects hole with an outer ring and and link it
 function eliminateHole(hole, outerNode) {
-    var bridge = findHoleBridge(hole, outerNode);
+    const bridge = findHoleBridge(hole, outerNode);
     if (!bridge) {
         return outerNode;
     }
 
-    var bridgeReverse = splitPolygon(bridge, hole);
+    const bridgeReverse = splitPolygon(bridge, hole);
 
     // filter collinear points around the cuts
     filterPoints(bridgeReverse, bridgeReverse.next);
@@ -25514,17 +25577,17 @@ function eliminateHole(hole, outerNode) {
 
 // David Eberly's algorithm for finding a bridge between hole and outer polygon
 function findHoleBridge(hole, outerNode) {
-    var p = outerNode,
-        hx = hole.x,
-        hy = hole.y,
-        qx = -Infinity,
-        m;
+    let p = outerNode;
+    const hx = hole.x;
+    const hy = hole.y;
+    let qx = -Infinity;
+    let m;
 
     // find a segment intersected by a ray from the hole's leftmost point to the left;
     // segment's endpoint with lesser x will be potential connection point
     do {
         if (hy <= p.y && hy >= p.next.y && p.next.y !== p.y) {
-            var x = p.x + (hy - p.y) * (p.next.x - p.x) / (p.next.y - p.y);
+            const x = p.x + (hy - p.y) * (p.next.x - p.x) / (p.next.y - p.y);
             if (x <= hx && x > qx) {
                 qx = x;
                 m = p.x < p.next.x ? p : p.next;
@@ -25540,11 +25603,10 @@ function findHoleBridge(hole, outerNode) {
     // if there are no points found, we have a valid connection;
     // otherwise choose the point of the minimum angle with the ray as connection point
 
-    var stop = m,
-        mx = m.x,
-        my = m.y,
-        tanMin = Infinity,
-        tan;
+    const stop = m;
+    const mx = m.x;
+    const my = m.y;
+    let tanMin = Infinity;
 
     p = m;
 
@@ -25552,7 +25614,7 @@ function findHoleBridge(hole, outerNode) {
         if (hx >= p.x && p.x >= mx && hx !== p.x &&
                 pointInTriangle(hy < my ? hx : qx, hy, mx, my, hy < my ? qx : hx, hy, p.x, p.y)) {
 
-            tan = Math.abs(hy - p.y) / (hx - p.x); // tangential
+            const tan = Math.abs(hy - p.y) / (hx - p.x); // tangential
 
             if (locallyInside(p, hole) &&
                 (tan < tanMin || (tan === tanMin && (p.x > m.x || (p.x === m.x && sectorContainsSector(m, p)))))) {
@@ -25574,7 +25636,7 @@ function sectorContainsSector(m, p) {
 
 // interlink polygon nodes in z-order
 function indexCurve(start, minX, minY, invSize) {
-    var p = start;
+    let p = start;
     do {
         if (p.z === 0) p.z = zOrder(p.x, p.y, minX, minY, invSize);
         p.prevZ = p.prev;
@@ -25591,25 +25653,26 @@ function indexCurve(start, minX, minY, invSize) {
 // Simon Tatham's linked list merge sort algorithm
 // http://www.chiark.greenend.org.uk/~sgtatham/algorithms/listsort.html
 function sortLinked(list) {
-    var i, p, q, e, tail, numMerges, pSize, qSize,
-        inSize = 1;
+    let numMerges;
+    let inSize = 1;
 
     do {
-        p = list;
+        let p = list;
+        let e;
         list = null;
-        tail = null;
+        let tail = null;
         numMerges = 0;
 
         while (p) {
             numMerges++;
-            q = p;
-            pSize = 0;
-            for (i = 0; i < inSize; i++) {
+            let q = p;
+            let pSize = 0;
+            for (let i = 0; i < inSize; i++) {
                 pSize++;
                 q = q.nextZ;
                 if (!q) break;
             }
-            qSize = inSize;
+            let qSize = inSize;
 
             while (pSize > 0 || (qSize > 0 && q)) {
 
@@ -25662,7 +25725,7 @@ function zOrder(x, y, minX, minY, invSize) {
 
 // find the leftmost node of a polygon ring
 function getLeftmost(start) {
-    var p = start,
+    let p = start,
         leftmost = start;
     do {
         if (p.x < leftmost.x || (p.x === leftmost.x && p.y < leftmost.y)) leftmost = p;
@@ -25699,10 +25762,10 @@ function equals(p1, p2) {
 
 // check if two segments intersect
 function intersects(p1, q1, p2, q2) {
-    var o1 = sign(area(p1, q1, p2));
-    var o2 = sign(area(p1, q1, q2));
-    var o3 = sign(area(p2, q2, p1));
-    var o4 = sign(area(p2, q2, q1));
+    const o1 = sign(area(p1, q1, p2));
+    const o2 = sign(area(p1, q1, q2));
+    const o3 = sign(area(p2, q2, p1));
+    const o4 = sign(area(p2, q2, q1));
 
     if (o1 !== o2 && o3 !== o4) return true; // general case
 
@@ -25725,7 +25788,7 @@ function sign(num) {
 
 // check if a polygon diagonal intersects any polygon segments
 function intersectsPolygon(a, b) {
-    var p = a;
+    let p = a;
     do {
         if (p.i !== a.i && p.next.i !== a.i && p.i !== b.i && p.next.i !== b.i &&
                 intersects(p, p.next, a, b)) return true;
@@ -25744,10 +25807,10 @@ function locallyInside(a, b) {
 
 // check if the middle point of a polygon diagonal is inside the polygon
 function middleInside(a, b) {
-    var p = a,
-        inside = false,
-        px = (a.x + b.x) / 2,
-        py = (a.y + b.y) / 2;
+    let p = a;
+    let inside = false;
+    const px = (a.x + b.x) / 2;
+    const py = (a.y + b.y) / 2;
     do {
         if (((p.y > py) !== (p.next.y > py)) && p.next.y !== p.y &&
                 (px < (p.next.x - p.x) * (py - p.y) / (p.next.y - p.y) + p.x))
@@ -25761,8 +25824,8 @@ function middleInside(a, b) {
 // link two polygon vertices with a bridge; if the vertices belong to the same ring, it splits polygon into two;
 // if one belongs to the outer ring and another to a hole, it merges it into a single ring
 function splitPolygon(a, b) {
-    var a2 = new Node(a.i, a.x, a.y),
-        b2 = new Node(b.i, b.x, b.y),
+    const a2 = createNode(a.i, a.x, a.y),
+        b2 = createNode(b.i, b.x, b.y),
         an = a.next,
         bp = b.prev;
 
@@ -25783,7 +25846,7 @@ function splitPolygon(a, b) {
 
 // create a node and optionally link it with previous one (in a circular doubly linked list)
 function insertNode(i, x, y, last) {
-    var p = new Node(i, x, y);
+    const p = createNode(i, x, y);
 
     if (!last) {
         p.prev = p;
@@ -25806,49 +25869,39 @@ function removeNode(p) {
     if (p.nextZ) p.nextZ.prevZ = p.prevZ;
 }
 
-function Node(i, x, y) {
-    // vertex index in coordinates array
-    this.i = i;
-
-    // vertex coordinates
-    this.x = x;
-    this.y = y;
-
-    // previous and next vertex nodes in a polygon ring
-    this.prev = null;
-    this.next = null;
-
-    // z-order curve value
-    this.z = 0;
-
-    // previous and next nodes in z-order
-    this.prevZ = null;
-    this.nextZ = null;
-
-    // indicates whether this is a steiner point
-    this.steiner = false;
+function createNode(i, x, y) {
+    return {
+        i, // vertex index in coordinates array
+        x, y, // vertex coordinates
+        prev: null, // previous and next vertex nodes in a polygon ring
+        next: null,
+        z: 0, // z-order curve value
+        prevZ: null, // previous and next nodes in z-order
+        nextZ: null,
+        steiner: false // indicates whether this is a steiner point
+    };
 }
 
 // return a percentage difference between the polygon area and its triangulation area;
 // used to verify correctness of triangulation
-earcut.deviation = function (data, holeIndices, dim, triangles) {
-    var hasHoles = holeIndices && holeIndices.length;
-    var outerLen = hasHoles ? holeIndices[0] * dim : data.length;
+function deviation(data, holeIndices, dim, triangles) {
+    const hasHoles = holeIndices && holeIndices.length;
+    const outerLen = hasHoles ? holeIndices[0] * dim : data.length;
 
-    var polygonArea = Math.abs(signedArea$1(data, 0, outerLen, dim));
+    let polygonArea = Math.abs(signedArea$1(data, 0, outerLen, dim));
     if (hasHoles) {
-        for (var i = 0, len = holeIndices.length; i < len; i++) {
-            var start = holeIndices[i] * dim;
-            var end = i < len - 1 ? holeIndices[i + 1] * dim : data.length;
+        for (let i = 0, len = holeIndices.length; i < len; i++) {
+            const start = holeIndices[i] * dim;
+            const end = i < len - 1 ? holeIndices[i + 1] * dim : data.length;
             polygonArea -= Math.abs(signedArea$1(data, start, end, dim));
         }
     }
 
-    var trianglesArea = 0;
-    for (i = 0; i < triangles.length; i += 3) {
-        var a = triangles[i] * dim;
-        var b = triangles[i + 1] * dim;
-        var c = triangles[i + 2] * dim;
+    let trianglesArea = 0;
+    for (let i = 0; i < triangles.length; i += 3) {
+        const a = triangles[i] * dim;
+        const b = triangles[i + 1] * dim;
+        const c = triangles[i + 2] * dim;
         trianglesArea += Math.abs(
             (data[a] - data[c]) * (data[b + 1] - data[a + 1]) -
             (data[a] - data[b]) * (data[c + 1] - data[a + 1]));
@@ -25856,11 +25909,11 @@ earcut.deviation = function (data, holeIndices, dim, triangles) {
 
     return polygonArea === 0 && trianglesArea === 0 ? 0 :
         Math.abs((trianglesArea - polygonArea) / polygonArea);
-};
+}
 
 function signedArea$1(data, start, end, dim) {
-    var sum = 0;
-    for (var i = start, j = end - dim; i < end; i += dim) {
+    let sum = 0;
+    for (let i = start, j = end - dim; i < end; i += dim) {
         sum += (data[j] - data[i]) * (data[i + 1] + data[j + 1]);
         j = i;
     }
@@ -25868,25 +25921,25 @@ function signedArea$1(data, start, end, dim) {
 }
 
 // turn a polygon in a multi-dimensional array form (e.g. as in GeoJSON) into a form Earcut accepts
-earcut.flatten = function (data) {
-    var dim = data[0][0].length,
-        result = {vertices: [], holes: [], dimensions: dim},
-        holeIndex = 0;
+function flatten(data) {
+    const vertices = [];
+    const holes = [];
+    const dimensions = data[0][0].length;
+    let holeIndex = 0;
+    let prevLen = 0;
 
-    for (var i = 0; i < data.length; i++) {
-        for (var j = 0; j < data[i].length; j++) {
-            for (var d = 0; d < dim; d++) result.vertices.push(data[i][j][d]);
+    for (const ring of data) {
+        for (const p of ring) {
+            for (let d = 0; d < dimensions; d++) vertices.push(p[d]);
         }
-        if (i > 0) {
-            holeIndex += data[i - 1].length;
-            result.holes.push(holeIndex);
+        if (prevLen) {
+            holeIndex += prevLen;
+            holes.push(holeIndex);
         }
+        prevLen = ring.length;
     }
-    return result;
-};
-
-var earcutExports = earcut$2.exports;
-var earcut$1 = /*@__PURE__*/getDefaultExportFromCjs$1(earcutExports);
+    return {vertices, holes, dimensions};
+}
 
 function hasPattern(type, layers, options) {
     const patterns = options.patternDependencies;
@@ -26056,7 +26109,7 @@ class FillBucket {
                 lineSegment.vertexLength += ring.length;
                 lineSegment.primitiveLength += ring.length;
             }
-            const indices = earcut$1(flattened, holeIndices);
+            const indices = earcut(flattened, holeIndices);
             for (let i = 0; i < indices.length; i += 3) {
                 this.indexArray.emplaceBack(triangleIndex + indices[i], triangleIndex + indices[i + 1], triangleIndex + indices[i + 2]);
             }
@@ -26614,7 +26667,7 @@ class FillExtrusionBucket {
                     flattened.push(p.y);
                 }
             }
-            const indices = earcut$1(flattened, holeIndices);
+            const indices = earcut(flattened, holeIndices);
             for (let j = 0; j < indices.length; j += 3) {
                 // Counter-clockwise winding order.
                 this.indexArray.emplaceBack(triangleIndex + indices[j], triangleIndex + indices[j + 2], triangleIndex + indices[j + 1]);
@@ -27790,7 +27843,7 @@ var SHIFT_LEFT_32 = (1 << 16) * (1 << 16),
 // Threshold chosen based on both benchmarking and knowledge about browser string
 // data structures (which currently switch structure types at 12 bytes or more)
 var TEXT_DECODER_MIN_LENGTH = 12;
-var utf8TextDecoder = typeof TextDecoder === 'undefined' ? null : new TextDecoder('utf8');
+var utf8TextDecoder = typeof TextDecoder === 'undefined' ? null : new TextDecoder('utf-8');
 
 Pbf.prototype = {
 
@@ -30426,7 +30479,7 @@ class Actor {
     receive(message) {
         const data = message.data;
         const id = data.id;
-        if (data.origin !== 'file://' && location.origin !== 'file://' && data.origin !== location.origin) {
+        if (data.origin !== 'file://' && location.origin !== 'file://' && data.origin !== 'resource://android' && location.origin !== 'resource://android' && data.origin !== location.origin) {
             return;
         }
         if (data.targetMapId && this.mapId !== data.targetMapId) {
@@ -30876,12 +30929,50 @@ function getMercCoords(x, y, z) {
 }
 
 /**
+ * Returns true if a given tile zoom (Z), X, and Y are in the bounds of the world.
+ * Zoom bounds are the minimum zoom (inclusive) through the maximum zoom (inclusive).
+ * X and Y bounds are 0 (inclusive) to their respective zoom-dependent maxima (exclusive).
+ *
+ * @param zoom - the tile zoom (Z)
+ * @param x - the tile X
+ * @param y - the tile Y
+ * @returns `true` if a given tile zoom, X, and Y are in the bounds of the world.
+ */
+function isInBoundsForTileZoomXY(zoom, x, y) {
+    return !(zoom < MIN_TILE_ZOOM ||
+        zoom > MAX_TILE_ZOOM ||
+        y < 0 ||
+        y >= Math.pow(2, zoom) ||
+        x < 0 ||
+        x >= Math.pow(2, zoom));
+}
+/**
+ * Returns true if a given zoom and `LngLat` are in the bounds of the world.
+ * Does not wrap `LngLat` when checking if in bounds.
+ * Zoom bounds are the minimum zoom (inclusive) through the maximum zoom (inclusive).
+ * `LngLat` bounds are the mercator world's north-west corner (inclusive) to its south-east corner (exclusive).
+ *
+ * @param zoom - the tile zoom (Z)
+ * @param LngLat - the `LngLat` object containing the longitude and latitude
+ * @returns `true` if a given zoom and `LngLat` are in the bounds of the world.
+ */
+function isInBoundsForZoomLngLat(zoom, lnglat) {
+    const { x, y } = MercatorCoordinate.fromLngLat(lnglat);
+    return !(zoom < MIN_TILE_ZOOM ||
+        zoom > MAX_TILE_ZOOM ||
+        y < 0 ||
+        y >= 1 ||
+        x < 0 ||
+        x >= 1);
+}
+
+/**
  * A canonical way to define a tile ID
  */
 class CanonicalTileID {
     constructor(z, x, y) {
-        if (z < 0 || z > 25 || y < 0 || y >= Math.pow(2, z) || x < 0 || x >= Math.pow(2, z)) {
-            throw new Error(`x=${x}, y=${y}, z=${z} outside of bounds. 0<=x<${Math.pow(2, z)}, 0<=y<${Math.pow(2, z)} 0<=z<=25 `);
+        if (!isInBoundsForTileZoomXY(z, x, y)) {
+            throw new Error(`x=${x}, y=${y}, z=${z} outside of bounds. 0<=x<${Math.pow(2, z)}, 0<=y<${Math.pow(2, z)} ${MIN_TILE_ZOOM}<=z<=${MAX_TILE_ZOOM} `);
         }
         this.z = z;
         this.x = x;
@@ -31989,7 +32080,7 @@ class CollisionFeature {
 }
 
 class TinyQueue {
-    constructor(data = [], compare = defaultCompare) {
+    constructor(data = [], compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0)) {
         this.data = data;
         this.length = this.data.length;
         this.compare = compare;
@@ -32001,8 +32092,7 @@ class TinyQueue {
 
     push(item) {
         this.data.push(item);
-        this.length++;
-        this._up(this.length - 1);
+        this._up(this.length++);
     }
 
     pop() {
@@ -32010,9 +32100,8 @@ class TinyQueue {
 
         const top = this.data[0];
         const bottom = this.data.pop();
-        this.length--;
 
-        if (this.length > 0) {
+        if (--this.length > 0) {
             this.data[0] = bottom;
             this._down(0);
         }
@@ -32045,26 +32134,20 @@ class TinyQueue {
         const item = data[pos];
 
         while (pos < halfLength) {
-            let left = (pos << 1) + 1;
-            let best = data[left];
-            const right = left + 1;
+            let bestChild = (pos << 1) + 1; // initially it is the left child
+            const right = bestChild + 1;
 
-            if (right < this.length && compare(data[right], best) < 0) {
-                left = right;
-                best = data[right];
+            if (right < this.length && compare(data[right], data[bestChild]) < 0) {
+                bestChild = right;
             }
-            if (compare(best, item) >= 0) break;
+            if (compare(data[bestChild], item) >= 0) break;
 
-            data[pos] = best;
-            pos = left;
+            data[pos] = data[bestChild];
+            pos = bestChild;
         }
 
         data[pos] = item;
     }
-}
-
-function defaultCompare(a, b) {
-    return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /**
@@ -33192,6 +33275,7 @@ exports.FillBucket = FillBucket;
 exports.FillExtrusionBucket = FillExtrusionBucket;
 exports.GLOBAL_DISPATCHER_ID = GLOBAL_DISPATCHER_ID;
 exports.GeoJSONFeature = GeoJSONFeature;
+exports.HEATMAP_FULL_RENDER_FBO_KEY = HEATMAP_FULL_RENDER_FBO_KEY;
 exports.ImageAtlas = ImageAtlas;
 exports.ImagePosition = ImagePosition;
 exports.KDBush = KDBush;
@@ -33285,6 +33369,7 @@ exports.interpolate = interpolate;
 exports.invert = invert$2;
 exports.isAbortError = isAbortError;
 exports.isImageBitmap = isImageBitmap;
+exports.isInBoundsForZoomLngLat = isInBoundsForZoomLngLat;
 exports.isOffscreenCanvasDistorted = isOffscreenCanvasDistorted;
 exports.isSafari = isSafari;
 exports.isWorker = isWorker;
@@ -33329,11 +33414,11 @@ exports.transformMat3 = transformMat3$1;
 exports.transformMat4 = transformMat4$1;
 exports.transformMat4$1 = transformMat4;
 exports.translate = translate$1;
-exports.unicodeBlockLookup = unicodeBlockLookup;
 exports.uniqueId = uniqueId;
 exports.v8Spec = v8Spec;
 exports.validateCustomStyleLayer = validateCustomStyleLayer;
 exports.validateLight = validateLight;
+exports.validateSky = validateSky;
 exports.validateStyle = validateStyle;
 exports.vectorTile = vectorTile;
 exports.warnOnce = warnOnce;
@@ -34124,7 +34209,7 @@ function writeValue (value, pbf) {
 var vtPbfExports = vtPbf$1.exports;
 var vtpbf = /*@__PURE__*/performance.getDefaultExportFromCjs(vtPbfExports);
 
-const defaultOptions = {
+const defaultOptions$1 = {
     minZoom: 0,   // min zoom to generate clusters on
     maxZoom: 16,  // max zoom level to cluster the points on
     minPoints: 2, // minimum points to form a cluster
@@ -34153,7 +34238,7 @@ const OFFSET_PROP = 6;
 
 class Supercluster {
     constructor(options) {
-        this.options = Object.assign(Object.create(defaultOptions), options);
+        this.options = Object.assign(Object.create(defaultOptions$1), options);
         this.trees = new Array(this.options.maxZoom + 1);
         this.stride = this.options.reduce ? 7 : 6;
         this.clusterProps = [];
@@ -34549,18 +34634,18 @@ function yLat(y) {
 // calculate simplification data using optimized Douglas-Peucker algorithm
 
 function simplify(coords, first, last, sqTolerance) {
-    var maxSqDist = sqTolerance;
-    var mid = (last - first) >> 1;
-    var minPosToMid = last - first;
-    var index;
+    let maxSqDist = sqTolerance;
+    const mid = first + ((last - first) >> 1);
+    let minPosToMid = last - first;
+    let index;
 
-    var ax = coords[first];
-    var ay = coords[first + 1];
-    var bx = coords[last];
-    var by = coords[last + 1];
+    const ax = coords[first];
+    const ay = coords[first + 1];
+    const bx = coords[last];
+    const by = coords[last + 1];
 
-    for (var i = first + 3; i < last; i += 3) {
-        var d = getSqSegDist(coords[i], coords[i + 1], ax, ay, bx, by);
+    for (let i = first + 3; i < last; i += 3) {
+        const d = getSqSegDist(coords[i], coords[i + 1], ax, ay, bx, by);
 
         if (d > maxSqDist) {
             index = i;
@@ -34570,7 +34655,7 @@ function simplify(coords, first, last, sqTolerance) {
             // a workaround to ensure we choose a pivot close to the middle of the list,
             // reducing recursion depth, for certain degenerate inputs
             // https://github.com/mapbox/geojson-vt/issues/104
-            var posToMid = Math.abs(i - mid);
+            const posToMid = Math.abs(i - mid);
             if (posToMid < minPosToMid) {
                 index = i;
                 minPosToMid = posToMid;
@@ -34588,12 +34673,12 @@ function simplify(coords, first, last, sqTolerance) {
 // square distance from a point to a segment
 function getSqSegDist(px, py, x, y, bx, by) {
 
-    var dx = bx - x;
-    var dy = by - y;
+    let dx = bx - x;
+    let dy = by - y;
 
     if (dx !== 0 || dy !== 0) {
 
-        var t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
+        const t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
 
         if (t > 1) {
             x = bx;
@@ -34612,43 +34697,41 @@ function getSqSegDist(px, py, x, y, bx, by) {
 }
 
 function createFeature(id, type, geom, tags) {
-    var feature = {
-        id: typeof id === 'undefined' ? null : id,
-        type: type,
+    const feature = {
+        id: id == null ? null : id,
+        type,
         geometry: geom,
-        tags: tags,
+        tags,
         minX: Infinity,
         minY: Infinity,
         maxX: -Infinity,
         maxY: -Infinity
     };
-    calcBBox(feature);
-    return feature;
-}
-
-function calcBBox(feature) {
-    var geom = feature.geometry;
-    var type = feature.type;
 
     if (type === 'Point' || type === 'MultiPoint' || type === 'LineString') {
         calcLineBBox(feature, geom);
 
-    } else if (type === 'Polygon' || type === 'MultiLineString') {
-        for (var i = 0; i < geom.length; i++) {
-            calcLineBBox(feature, geom[i]);
+    } else if (type === 'Polygon') {
+        // the outer ring (ie [0]) contains all inner rings
+        calcLineBBox(feature, geom[0]);
+
+    } else if (type === 'MultiLineString') {
+        for (const line of geom) {
+            calcLineBBox(feature, line);
         }
 
     } else if (type === 'MultiPolygon') {
-        for (i = 0; i < geom.length; i++) {
-            for (var j = 0; j < geom[i].length; j++) {
-                calcLineBBox(feature, geom[i][j]);
-            }
+        for (const polygon of geom) {
+            // the outer ring (ie [0]) contains all inner rings
+            calcLineBBox(feature, polygon[0]);
         }
     }
+
+    return feature;
 }
 
 function calcLineBBox(feature, geom) {
-    for (var i = 0; i < geom.length; i += 3) {
+    for (let i = 0; i < geom.length; i += 3) {
         feature.minX = Math.min(feature.minX, geom[i]);
         feature.minY = Math.min(feature.minY, geom[i + 1]);
         feature.maxX = Math.max(feature.maxX, geom[i]);
@@ -34659,9 +34742,9 @@ function calcLineBBox(feature, geom) {
 // converts GeoJSON feature into an intermediate projected JSON vector format with simplification data
 
 function convert(data, options) {
-    var features = [];
+    const features = [];
     if (data.type === 'FeatureCollection') {
-        for (var i = 0; i < data.features.length; i++) {
+        for (let i = 0; i < data.features.length; i++) {
             convertFeature(features, data.features[i], options, i);
         }
 
@@ -34679,11 +34762,13 @@ function convert(data, options) {
 function convertFeature(features, geojson, options, index) {
     if (!geojson.geometry) return;
 
-    var coords = geojson.geometry.coordinates;
-    var type = geojson.geometry.type;
-    var tolerance = Math.pow(options.tolerance / ((1 << options.maxZoom) * options.extent), 2);
-    var geometry = [];
-    var id = geojson.id;
+    const coords = geojson.geometry.coordinates;
+    if (coords && coords.length === 0) return;
+
+    const type = geojson.geometry.type;
+    const tolerance = Math.pow(options.tolerance / ((1 << options.maxZoom) * options.extent), 2);
+    let geometry = [];
+    let id = geojson.id;
     if (options.promoteId) {
         id = geojson.properties[options.promoteId];
     } else if (options.generateId) {
@@ -34693,8 +34778,8 @@ function convertFeature(features, geojson, options, index) {
         convertPoint(coords, geometry);
 
     } else if (type === 'MultiPoint') {
-        for (var i = 0; i < coords.length; i++) {
-            convertPoint(coords[i], geometry);
+        for (const p of coords) {
+            convertPoint(p, geometry);
         }
 
     } else if (type === 'LineString') {
@@ -34703,9 +34788,9 @@ function convertFeature(features, geojson, options, index) {
     } else if (type === 'MultiLineString') {
         if (options.lineMetrics) {
             // explode into linestrings to be able to track metrics
-            for (i = 0; i < coords.length; i++) {
+            for (const line of coords) {
                 geometry = [];
-                convertLine(coords[i], geometry, tolerance, false);
+                convertLine(line, geometry, tolerance, false);
                 features.push(createFeature(id, 'LineString', geometry, geojson.properties));
             }
             return;
@@ -34717,16 +34802,16 @@ function convertFeature(features, geojson, options, index) {
         convertLines(coords, geometry, tolerance, true);
 
     } else if (type === 'MultiPolygon') {
-        for (i = 0; i < coords.length; i++) {
-            var polygon = [];
-            convertLines(coords[i], polygon, tolerance, true);
-            geometry.push(polygon);
+        for (const polygon of coords) {
+            const newPolygon = [];
+            convertLines(polygon, newPolygon, tolerance, true);
+            geometry.push(newPolygon);
         }
     } else if (type === 'GeometryCollection') {
-        for (i = 0; i < geojson.geometry.geometries.length; i++) {
+        for (const singleGeometry of geojson.geometry.geometries) {
             convertFeature(features, {
-                id: id,
-                geometry: geojson.geometry.geometries[i],
+                id,
+                geometry: singleGeometry,
                 properties: geojson.properties
             }, options, index);
         }
@@ -34739,22 +34824,18 @@ function convertFeature(features, geojson, options, index) {
 }
 
 function convertPoint(coords, out) {
-    out.push(projectX(coords[0]));
-    out.push(projectY(coords[1]));
-    out.push(0);
+    out.push(projectX(coords[0]), projectY(coords[1]), 0);
 }
 
 function convertLine(ring, out, tolerance, isPolygon) {
-    var x0, y0;
-    var size = 0;
+    let x0, y0;
+    let size = 0;
 
-    for (var j = 0; j < ring.length; j++) {
-        var x = projectX(ring[j][0]);
-        var y = projectY(ring[j][1]);
+    for (let j = 0; j < ring.length; j++) {
+        const x = projectX(ring[j][0]);
+        const y = projectY(ring[j][1]);
 
-        out.push(x);
-        out.push(y);
-        out.push(0);
+        out.push(x, y, 0);
 
         if (j > 0) {
             if (isPolygon) {
@@ -34767,7 +34848,7 @@ function convertLine(ring, out, tolerance, isPolygon) {
         y0 = y;
     }
 
-    var last = out.length - 3;
+    const last = out.length - 3;
     out[2] = 1;
     simplify(out, 0, last, tolerance);
     out[last + 2] = 1;
@@ -34778,8 +34859,8 @@ function convertLine(ring, out, tolerance, isPolygon) {
 }
 
 function convertLines(rings, out, tolerance, isPolygon) {
-    for (var i = 0; i < rings.length; i++) {
-        var geom = [];
+    for (let i = 0; i < rings.length; i++) {
+        const geom = [];
         convertLine(rings[i], geom, tolerance, isPolygon);
         out.push(geom);
     }
@@ -34790,36 +34871,36 @@ function projectX(x) {
 }
 
 function projectY(y) {
-    var sin = Math.sin(y * Math.PI / 180);
-    var y2 = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
+    const sin = Math.sin(y * Math.PI / 180);
+    const y2 = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
     return y2 < 0 ? 0 : y2 > 1 ? 1 : y2;
 }
 
-/* clip features between two axis-parallel lines:
+/* clip features between two vertical or horizontal axis-parallel lines:
  *     |        |
  *  ___|___     |     /
  * /   |   \____|____/
  *     |        |
+ *
+ * k1 and k2 are the line coordinates
+ * axis: 0 for x, 1 for y
+ * minAll and maxAll: minimum and maximum coordinate value for all features
  */
-
 function clip(features, scale, k1, k2, axis, minAll, maxAll, options) {
-
     k1 /= scale;
     k2 /= scale;
 
     if (minAll >= k1 && maxAll < k2) return features; // trivial accept
     else if (maxAll < k1 || minAll >= k2) return null; // trivial reject
 
-    var clipped = [];
+    const clipped = [];
 
-    for (var i = 0; i < features.length; i++) {
+    for (const feature of features) {
+        const geometry = feature.geometry;
+        let type = feature.type;
 
-        var feature = features[i];
-        var geometry = feature.geometry;
-        var type = feature.type;
-
-        var min = axis === 0 ? feature.minX : feature.minY;
-        var max = axis === 0 ? feature.maxX : feature.maxY;
+        const min = axis === 0 ? feature.minX : feature.minY;
+        const max = axis === 0 ? feature.maxX : feature.maxY;
 
         if (min >= k1 && max < k2) { // trivial accept
             clipped.push(feature);
@@ -34828,7 +34909,7 @@ function clip(features, scale, k1, k2, axis, minAll, maxAll, options) {
             continue;
         }
 
-        var newGeometry = [];
+        let newGeometry = [];
 
         if (type === 'Point' || type === 'MultiPoint') {
             clipPoints(geometry, newGeometry, k1, k2, axis);
@@ -34843,19 +34924,19 @@ function clip(features, scale, k1, k2, axis, minAll, maxAll, options) {
             clipLines(geometry, newGeometry, k1, k2, axis, true);
 
         } else if (type === 'MultiPolygon') {
-            for (var j = 0; j < geometry.length; j++) {
-                var polygon = [];
-                clipLines(geometry[j], polygon, k1, k2, axis, true);
-                if (polygon.length) {
-                    newGeometry.push(polygon);
+            for (const polygon of geometry) {
+                const newPolygon = [];
+                clipLines(polygon, newPolygon, k1, k2, axis, true);
+                if (newPolygon.length) {
+                    newGeometry.push(newPolygon);
                 }
             }
         }
 
         if (newGeometry.length) {
             if (options.lineMetrics && type === 'LineString') {
-                for (j = 0; j < newGeometry.length; j++) {
-                    clipped.push(createFeature(feature.id, type, newGeometry[j], feature.tags));
+                for (const line of newGeometry) {
+                    clipped.push(createFeature(feature.id, type, line, feature.tags));
                 }
                 continue;
             }
@@ -34880,33 +34961,31 @@ function clip(features, scale, k1, k2, axis, minAll, maxAll, options) {
 }
 
 function clipPoints(geom, newGeom, k1, k2, axis) {
-    for (var i = 0; i < geom.length; i += 3) {
-        var a = geom[i + axis];
+    for (let i = 0; i < geom.length; i += 3) {
+        const a = geom[i + axis];
 
         if (a >= k1 && a <= k2) {
-            newGeom.push(geom[i]);
-            newGeom.push(geom[i + 1]);
-            newGeom.push(geom[i + 2]);
+            addPoint(newGeom, geom[i], geom[i + 1], geom[i + 2]);
         }
     }
 }
 
 function clipLine(geom, newGeom, k1, k2, axis, isPolygon, trackMetrics) {
 
-    var slice = newSlice(geom);
-    var intersect = axis === 0 ? intersectX : intersectY;
-    var len = geom.start;
-    var segLen, t;
+    let slice = newSlice(geom);
+    const intersect = axis === 0 ? intersectX : intersectY;
+    let len = geom.start;
+    let segLen, t;
 
-    for (var i = 0; i < geom.length - 3; i += 3) {
-        var ax = geom[i];
-        var ay = geom[i + 1];
-        var az = geom[i + 2];
-        var bx = geom[i + 3];
-        var by = geom[i + 4];
-        var a = axis === 0 ? ax : ay;
-        var b = axis === 0 ? bx : by;
-        var exited = false;
+    for (let i = 0; i < geom.length - 3; i += 3) {
+        const ax = geom[i];
+        const ay = geom[i + 1];
+        const az = geom[i + 2];
+        const bx = geom[i + 3];
+        const by = geom[i + 4];
+        const a = axis === 0 ? ax : ay;
+        const b = axis === 0 ? bx : by;
+        let exited = false;
 
         if (trackMetrics) segLen = Math.sqrt(Math.pow(ax - bx, 2) + Math.pow(ay - by, 2));
 
@@ -34946,11 +35025,11 @@ function clipLine(geom, newGeom, k1, k2, axis, isPolygon, trackMetrics) {
     }
 
     // add the last point
-    var last = geom.length - 3;
-    ax = geom[last];
-    ay = geom[last + 1];
-    az = geom[last + 2];
-    a = axis === 0 ? ax : ay;
+    let last = geom.length - 3;
+    const ax = geom[last];
+    const ay = geom[last + 1];
+    const az = geom[last + 2];
+    const a = axis === 0 ? ax : ay;
     if (a >= k1 && a <= k2) addPoint(slice, ax, ay, az);
 
     // close the polygon if its endpoints are not the same after clipping
@@ -34966,7 +35045,7 @@ function clipLine(geom, newGeom, k1, k2, axis, isPolygon, trackMetrics) {
 }
 
 function newSlice(line) {
-    var slice = [];
+    const slice = [];
     slice.size = line.size;
     slice.start = line.start;
     slice.end = line.end;
@@ -34974,38 +35053,32 @@ function newSlice(line) {
 }
 
 function clipLines(geom, newGeom, k1, k2, axis, isPolygon) {
-    for (var i = 0; i < geom.length; i++) {
-        clipLine(geom[i], newGeom, k1, k2, axis, isPolygon, false);
+    for (const line of geom) {
+        clipLine(line, newGeom, k1, k2, axis, isPolygon, false);
     }
 }
 
 function addPoint(out, x, y, z) {
-    out.push(x);
-    out.push(y);
-    out.push(z);
+    out.push(x, y, z);
 }
 
 function intersectX(out, ax, ay, bx, by, x) {
-    var t = (x - ax) / (bx - ax);
-    out.push(x);
-    out.push(ay + (by - ay) * t);
-    out.push(1);
+    const t = (x - ax) / (bx - ax);
+    addPoint(out, x, ay + (by - ay) * t, 1);
     return t;
 }
 
 function intersectY(out, ax, ay, bx, by, y) {
-    var t = (y - ay) / (by - ay);
-    out.push(ax + (bx - ax) * t);
-    out.push(y);
-    out.push(1);
+    const t = (y - ay) / (by - ay);
+    addPoint(out, ax + (bx - ax) * t, y, 1);
     return t;
 }
 
 function wrap(features, options) {
-    var buffer = options.buffer / options.extent;
-    var merged = features;
-    var left  = clip(features, 1, -1 - buffer, buffer,     0, -1, 2, options); // left world copy
-    var right = clip(features, 1,  1 - buffer, 2 + buffer, 0, -1, 2, options); // right world copy
+    const buffer = options.buffer / options.extent;
+    let merged = features;
+    const left  = clip(features, 1, -1 - buffer, buffer,     0, -1, 2, options); // left world copy
+    const right = clip(features, 1,  1 - buffer, 2 + buffer, 0, -1, 2, options); // right world copy
 
     if (left || right) {
         merged = clip(features, 1, -buffer, 1 + buffer, 0, -1, 2, options) || []; // center world copy
@@ -35018,28 +35091,28 @@ function wrap(features, options) {
 }
 
 function shiftFeatureCoords(features, offset) {
-    var newFeatures = [];
+    const newFeatures = [];
 
-    for (var i = 0; i < features.length; i++) {
-        var feature = features[i],
-            type = feature.type;
+    for (let i = 0; i < features.length; i++) {
+        const feature = features[i];
+        const type = feature.type;
 
-        var newGeometry;
+        let newGeometry;
 
         if (type === 'Point' || type === 'MultiPoint' || type === 'LineString') {
             newGeometry = shiftCoords(feature.geometry, offset);
 
         } else if (type === 'MultiLineString' || type === 'Polygon') {
             newGeometry = [];
-            for (var j = 0; j < feature.geometry.length; j++) {
-                newGeometry.push(shiftCoords(feature.geometry[j], offset));
+            for (const line of feature.geometry) {
+                newGeometry.push(shiftCoords(line, offset));
             }
         } else if (type === 'MultiPolygon') {
             newGeometry = [];
-            for (j = 0; j < feature.geometry.length; j++) {
-                var newPolygon = [];
-                for (var k = 0; k < feature.geometry[j].length; k++) {
-                    newPolygon.push(shiftCoords(feature.geometry[j][k], offset));
+            for (const polygon of feature.geometry) {
+                const newPolygon = [];
+                for (const line of polygon) {
+                    newPolygon.push(shiftCoords(line, offset));
                 }
                 newGeometry.push(newPolygon);
             }
@@ -35052,7 +35125,7 @@ function shiftFeatureCoords(features, offset) {
 }
 
 function shiftCoords(points, offset) {
-    var newPoints = [];
+    const newPoints = [];
     newPoints.size = points.size;
 
     if (points.start !== undefined) {
@@ -35060,7 +35133,7 @@ function shiftCoords(points, offset) {
         newPoints.end = points.end;
     }
 
-    for (var i = 0; i < points.length; i += 3) {
+    for (let i = 0; i < points.length; i += 3) {
         newPoints.push(points[i] + offset, points[i + 1], points[i + 2]);
     }
     return newPoints;
@@ -35071,26 +35144,24 @@ function shiftCoords(points, offset) {
 function transformTile(tile, extent) {
     if (tile.transformed) return tile;
 
-    var z2 = 1 << tile.z,
-        tx = tile.x,
-        ty = tile.y,
-        i, j, k;
+    const z2 = 1 << tile.z;
+    const tx = tile.x;
+    const ty = tile.y;
 
-    for (i = 0; i < tile.features.length; i++) {
-        var feature = tile.features[i],
-            geom = feature.geometry,
-            type = feature.type;
+    for (const feature of tile.features) {
+        const geom = feature.geometry;
+        const type = feature.type;
 
         feature.geometry = [];
 
         if (type === 1) {
-            for (j = 0; j < geom.length; j += 2) {
+            for (let j = 0; j < geom.length; j += 2) {
                 feature.geometry.push(transformPoint(geom[j], geom[j + 1], extent, z2, tx, ty));
             }
         } else {
-            for (j = 0; j < geom.length; j++) {
-                var ring = [];
-                for (k = 0; k < geom[j].length; k += 2) {
+            for (let j = 0; j < geom.length; j++) {
+                const ring = [];
+                for (let k = 0; k < geom[j].length; k += 2) {
                     ring.push(transformPoint(geom[j][k], geom[j][k + 1], extent, z2, tx, ty));
                 }
                 feature.geometry.push(ring);
@@ -35110,49 +35181,41 @@ function transformPoint(x, y, extent, z2, tx, ty) {
 }
 
 function createTile(features, z, tx, ty, options) {
-    var tolerance = z === options.maxZoom ? 0 : options.tolerance / ((1 << z) * options.extent);
-    var tile = {
+    const tolerance = z === options.maxZoom ? 0 : options.tolerance / ((1 << z) * options.extent);
+    const tile = {
         features: [],
         numPoints: 0,
         numSimplified: 0,
-        numFeatures: 0,
+        numFeatures: features.length,
         source: null,
         x: tx,
         y: ty,
-        z: z,
+        z,
         transformed: false,
         minX: 2,
         minY: 1,
         maxX: -1,
         maxY: 0
     };
-    for (var i = 0; i < features.length; i++) {
-        tile.numFeatures++;
-        addFeature(tile, features[i], tolerance, options);
-
-        var minX = features[i].minX;
-        var minY = features[i].minY;
-        var maxX = features[i].maxX;
-        var maxY = features[i].maxY;
-
-        if (minX < tile.minX) tile.minX = minX;
-        if (minY < tile.minY) tile.minY = minY;
-        if (maxX > tile.maxX) tile.maxX = maxX;
-        if (maxY > tile.maxY) tile.maxY = maxY;
+    for (const feature of features) {
+        addFeature(tile, feature, tolerance, options);
     }
     return tile;
 }
 
 function addFeature(tile, feature, tolerance, options) {
+    const geom = feature.geometry;
+    const type = feature.type;
+    const simplified = [];
 
-    var geom = feature.geometry,
-        type = feature.type,
-        simplified = [];
+    tile.minX = Math.min(tile.minX, feature.minX);
+    tile.minY = Math.min(tile.minY, feature.minY);
+    tile.maxX = Math.max(tile.maxX, feature.maxX);
+    tile.maxY = Math.max(tile.maxY, feature.maxY);
 
     if (type === 'Point' || type === 'MultiPoint') {
-        for (var i = 0; i < geom.length; i += 3) {
-            simplified.push(geom[i]);
-            simplified.push(geom[i + 1]);
+        for (let i = 0; i < geom.length; i += 3) {
+            simplified.push(geom[i], geom[i + 1]);
             tile.numPoints++;
             tile.numSimplified++;
         }
@@ -35161,33 +35224,35 @@ function addFeature(tile, feature, tolerance, options) {
         addLine(simplified, geom, tile, tolerance, false, false);
 
     } else if (type === 'MultiLineString' || type === 'Polygon') {
-        for (i = 0; i < geom.length; i++) {
+        for (let i = 0; i < geom.length; i++) {
             addLine(simplified, geom[i], tile, tolerance, type === 'Polygon', i === 0);
         }
 
     } else if (type === 'MultiPolygon') {
 
-        for (var k = 0; k < geom.length; k++) {
-            var polygon = geom[k];
-            for (i = 0; i < polygon.length; i++) {
+        for (let k = 0; k < geom.length; k++) {
+            const polygon = geom[k];
+            for (let i = 0; i < polygon.length; i++) {
                 addLine(simplified, polygon[i], tile, tolerance, true, i === 0);
             }
         }
     }
 
     if (simplified.length) {
-        var tags = feature.tags || null;
+        let tags = feature.tags || null;
+
         if (type === 'LineString' && options.lineMetrics) {
             tags = {};
-            for (var key in feature.tags) tags[key] = feature.tags[key];
+            for (const key in feature.tags) tags[key] = feature.tags[key];
             tags['mapbox_clip_start'] = geom.start / geom.size;
             tags['mapbox_clip_end'] = geom.end / geom.size;
         }
-        var tileFeature = {
+
+        const tileFeature = {
             geometry: simplified,
             type: type === 'Polygon' || type === 'MultiPolygon' ? 3 :
-                type === 'LineString' || type === 'MultiLineString' ? 2 : 1,
-            tags: tags
+            (type === 'LineString' || type === 'MultiLineString' ? 2 : 1),
+            tags
         };
         if (feature.id !== null) {
             tileFeature.id = feature.id;
@@ -35197,20 +35262,19 @@ function addFeature(tile, feature, tolerance, options) {
 }
 
 function addLine(result, geom, tile, tolerance, isPolygon, isOuter) {
-    var sqTolerance = tolerance * tolerance;
+    const sqTolerance = tolerance * tolerance;
 
     if (tolerance > 0 && (geom.size < (isPolygon ? sqTolerance : tolerance))) {
         tile.numPoints += geom.length / 3;
         return;
     }
 
-    var ring = [];
+    const ring = [];
 
-    for (var i = 0; i < geom.length; i += 3) {
+    for (let i = 0; i < geom.length; i += 3) {
         if (tolerance === 0 || geom[i + 2] > sqTolerance) {
             tile.numSimplified++;
-            ring.push(geom[i]);
-            ring.push(geom[i + 1]);
+            ring.push(geom[i], geom[i + 1]);
         }
         tile.numPoints++;
     }
@@ -35221,14 +35285,14 @@ function addLine(result, geom, tile, tolerance, isPolygon, isOuter) {
 }
 
 function rewind(ring, clockwise) {
-    var area = 0;
-    for (var i = 0, len = ring.length, j = len - 2; i < len; j = i, i += 2) {
+    let area = 0;
+    for (let i = 0, len = ring.length, j = len - 2; i < len; j = i, i += 2) {
         area += (ring[i] - ring[j]) * (ring[i + 1] + ring[j + 1]);
     }
     if (area > 0 === clockwise) {
-        for (i = 0, len = ring.length; i < len / 2; i += 2) {
-            var x = ring[i];
-            var y = ring[i + 1];
+        for (let i = 0, len = ring.length; i < len / 2; i += 2) {
+            const x = ring[i];
+            const y = ring[i + 1];
             ring[i] = ring[len - 2 - i];
             ring[i + 1] = ring[len - 1 - i];
             ring[len - 2 - i] = x;
@@ -35237,46 +35301,7 @@ function rewind(ring, clockwise) {
     }
 }
 
-function geojsonvt(data, options) {
-    return new GeoJSONVT(data, options);
-}
-
-function GeoJSONVT(data, options) {
-    options = this.options = extend(Object.create(this.options), options);
-
-    var debug = options.debug;
-
-    if (debug) console.time('preprocess data');
-
-    if (options.maxZoom < 0 || options.maxZoom > 24) throw new Error('maxZoom should be in the 0-24 range');
-    if (options.promoteId && options.generateId) throw new Error('promoteId and generateId cannot be used together.');
-
-    var features = convert(data, options);
-
-    this.tiles = {};
-    this.tileCoords = [];
-
-    if (debug) {
-        console.timeEnd('preprocess data');
-        console.log('index: maxZoom: %d, maxPoints: %d', options.indexMaxZoom, options.indexMaxPoints);
-        console.time('generate tiles');
-        this.stats = {};
-        this.total = 0;
-    }
-
-    features = wrap(features, options);
-
-    // start slicing from the top tile down
-    if (features.length) this.splitTile(features, 0, 0, 0);
-
-    if (debug) {
-        if (features.length) console.log('features: %d, points: %d', this.tiles[0].numFeatures, this.tiles[0].numPoints);
-        console.timeEnd('generate tiles');
-        console.log('tiles generated:', this.total, JSON.stringify(this.stats));
-    }
-}
-
-GeoJSONVT.prototype.options = {
+const defaultOptions = {
     maxZoom: 14,            // max zoom to preserve detail on
     indexMaxZoom: 5,        // max zoom in the tile index
     indexMaxPoints: 100000, // max number of points per tile in the tile index
@@ -35289,146 +35314,201 @@ GeoJSONVT.prototype.options = {
     debug: 0                // logging level (0, 1 or 2)
 };
 
-GeoJSONVT.prototype.splitTile = function (features, z, x, y, cz, cx, cy) {
+class GeoJSONVT {
+    constructor(data, options) {
+        options = this.options = extend(Object.create(defaultOptions), options);
 
-    var stack = [features, z, x, y],
-        options = this.options,
-        debug = options.debug;
+        const debug = options.debug;
 
-    // avoid recursion by using a processing queue
-    while (stack.length) {
-        y = stack.pop();
-        x = stack.pop();
-        z = stack.pop();
-        features = stack.pop();
+        if (debug) console.time('preprocess data');
 
-        var z2 = 1 << z,
-            id = toID(z, x, y),
-            tile = this.tiles[id];
+        if (options.maxZoom < 0 || options.maxZoom > 24) throw new Error('maxZoom should be in the 0-24 range');
+        if (options.promoteId && options.generateId) throw new Error('promoteId and generateId cannot be used together.');
 
-        if (!tile) {
-            if (debug > 1) console.time('creation');
+        // projects and adds simplification info
+        let features = convert(data, options);
 
-            tile = this.tiles[id] = createTile(features, z, x, y, options);
-            this.tileCoords.push({z: z, x: x, y: y});
+        // tiles and tileCoords are part of the public API
+        this.tiles = {};
+        this.tileCoords = [];
 
-            if (debug) {
-                if (debug > 1) {
-                    console.log('tile z%d-%d-%d (features: %d, points: %d, simplified: %d)',
-                        z, x, y, tile.numFeatures, tile.numPoints, tile.numSimplified);
-                    console.timeEnd('creation');
+        if (debug) {
+            console.timeEnd('preprocess data');
+            console.log('index: maxZoom: %d, maxPoints: %d', options.indexMaxZoom, options.indexMaxPoints);
+            console.time('generate tiles');
+            this.stats = {};
+            this.total = 0;
+        }
+
+        // wraps features (ie extreme west and extreme east)
+        features = wrap(features, options);
+
+        // start slicing from the top tile down
+        if (features.length) this.splitTile(features, 0, 0, 0);
+
+        if (debug) {
+            if (features.length) console.log('features: %d, points: %d', this.tiles[0].numFeatures, this.tiles[0].numPoints);
+            console.timeEnd('generate tiles');
+            console.log('tiles generated:', this.total, JSON.stringify(this.stats));
+        }
+    }
+
+    // splits features from a parent tile to sub-tiles.
+    // z, x, and y are the coordinates of the parent tile
+    // cz, cx, and cy are the coordinates of the target tile
+    //
+    // If no target tile is specified, splitting stops when we reach the maximum
+    // zoom or the number of points is low as specified in the options.
+    splitTile(features, z, x, y, cz, cx, cy) {
+
+        const stack = [features, z, x, y];
+        const options = this.options;
+        const debug = options.debug;
+
+        // avoid recursion by using a processing queue
+        while (stack.length) {
+            y = stack.pop();
+            x = stack.pop();
+            z = stack.pop();
+            features = stack.pop();
+
+            const z2 = 1 << z;
+            const id = toID(z, x, y);
+            let tile = this.tiles[id];
+
+            if (!tile) {
+                if (debug > 1) console.time('creation');
+
+                tile = this.tiles[id] = createTile(features, z, x, y, options);
+                this.tileCoords.push({z, x, y});
+
+                if (debug) {
+                    if (debug > 1) {
+                        console.log('tile z%d-%d-%d (features: %d, points: %d, simplified: %d)',
+                            z, x, y, tile.numFeatures, tile.numPoints, tile.numSimplified);
+                        console.timeEnd('creation');
+                    }
+                    const key = `z${  z}`;
+                    this.stats[key] = (this.stats[key] || 0) + 1;
+                    this.total++;
                 }
-                var key = 'z' + z;
-                this.stats[key] = (this.stats[key] || 0) + 1;
-                this.total++;
             }
+
+            // save reference to original geometry in tile so that we can drill down later if we stop now
+            tile.source = features;
+
+            // if it's the first-pass tiling
+            if (cz == null) {
+                // stop tiling if we reached max zoom, or if the tile is too simple
+                if (z === options.indexMaxZoom || tile.numPoints <= options.indexMaxPoints) continue;
+            // if a drilldown to a specific tile
+            } else if (z === options.maxZoom || z === cz) {
+                // stop tiling if we reached base zoom or our target tile zoom
+                continue;
+            } else if (cz != null) {
+                // stop tiling if it's not an ancestor of the target tile
+                const zoomSteps = cz - z;
+                if (x !== cx >> zoomSteps || y !== cy >> zoomSteps) continue;
+            }
+
+            // if we slice further down, no need to keep source geometry
+            tile.source = null;
+
+            if (features.length === 0) continue;
+
+            if (debug > 1) console.time('clipping');
+
+            // values we'll use for clipping
+            const k1 = 0.5 * options.buffer / options.extent;
+            const k2 = 0.5 - k1;
+            const k3 = 0.5 + k1;
+            const k4 = 1 + k1;
+
+            let tl = null;
+            let bl = null;
+            let tr = null;
+            let br = null;
+
+            let left  = clip(features, z2, x - k1, x + k3, 0, tile.minX, tile.maxX, options);
+            let right = clip(features, z2, x + k2, x + k4, 0, tile.minX, tile.maxX, options);
+            features = null;
+
+            if (left) {
+                tl = clip(left, z2, y - k1, y + k3, 1, tile.minY, tile.maxY, options);
+                bl = clip(left, z2, y + k2, y + k4, 1, tile.minY, tile.maxY, options);
+                left = null;
+            }
+
+            if (right) {
+                tr = clip(right, z2, y - k1, y + k3, 1, tile.minY, tile.maxY, options);
+                br = clip(right, z2, y + k2, y + k4, 1, tile.minY, tile.maxY, options);
+                right = null;
+            }
+
+            if (debug > 1) console.timeEnd('clipping');
+
+            stack.push(tl || [], z + 1, x * 2,     y * 2);
+            stack.push(bl || [], z + 1, x * 2,     y * 2 + 1);
+            stack.push(tr || [], z + 1, x * 2 + 1, y * 2);
+            stack.push(br || [], z + 1, x * 2 + 1, y * 2 + 1);
         }
-
-        // save reference to original geometry in tile so that we can drill down later if we stop now
-        tile.source = features;
-
-        // if it's the first-pass tiling
-        if (!cz) {
-            // stop tiling if we reached max zoom, or if the tile is too simple
-            if (z === options.indexMaxZoom || tile.numPoints <= options.indexMaxPoints) continue;
-
-        // if a drilldown to a specific tile
-        } else {
-            // stop tiling if we reached base zoom or our target tile zoom
-            if (z === options.maxZoom || z === cz) continue;
-
-            // stop tiling if it's not an ancestor of the target tile
-            var m = 1 << (cz - z);
-            if (x !== Math.floor(cx / m) || y !== Math.floor(cy / m)) continue;
-        }
-
-        // if we slice further down, no need to keep source geometry
-        tile.source = null;
-
-        if (features.length === 0) continue;
-
-        if (debug > 1) console.time('clipping');
-
-        // values we'll use for clipping
-        var k1 = 0.5 * options.buffer / options.extent,
-            k2 = 0.5 - k1,
-            k3 = 0.5 + k1,
-            k4 = 1 + k1,
-            tl, bl, tr, br, left, right;
-
-        tl = bl = tr = br = null;
-
-        left  = clip(features, z2, x - k1, x + k3, 0, tile.minX, tile.maxX, options);
-        right = clip(features, z2, x + k2, x + k4, 0, tile.minX, tile.maxX, options);
-        features = null;
-
-        if (left) {
-            tl = clip(left, z2, y - k1, y + k3, 1, tile.minY, tile.maxY, options);
-            bl = clip(left, z2, y + k2, y + k4, 1, tile.minY, tile.maxY, options);
-            left = null;
-        }
-
-        if (right) {
-            tr = clip(right, z2, y - k1, y + k3, 1, tile.minY, tile.maxY, options);
-            br = clip(right, z2, y + k2, y + k4, 1, tile.minY, tile.maxY, options);
-            right = null;
-        }
-
-        if (debug > 1) console.timeEnd('clipping');
-
-        stack.push(tl || [], z + 1, x * 2,     y * 2);
-        stack.push(bl || [], z + 1, x * 2,     y * 2 + 1);
-        stack.push(tr || [], z + 1, x * 2 + 1, y * 2);
-        stack.push(br || [], z + 1, x * 2 + 1, y * 2 + 1);
-    }
-};
-
-GeoJSONVT.prototype.getTile = function (z, x, y) {
-    var options = this.options,
-        extent = options.extent,
-        debug = options.debug;
-
-    if (z < 0 || z > 24) return null;
-
-    var z2 = 1 << z;
-    x = ((x % z2) + z2) % z2; // wrap tile x coordinate
-
-    var id = toID(z, x, y);
-    if (this.tiles[id]) return transformTile(this.tiles[id], extent);
-
-    if (debug > 1) console.log('drilling down to z%d-%d-%d', z, x, y);
-
-    var z0 = z,
-        x0 = x,
-        y0 = y,
-        parent;
-
-    while (!parent && z0 > 0) {
-        z0--;
-        x0 = Math.floor(x0 / 2);
-        y0 = Math.floor(y0 / 2);
-        parent = this.tiles[toID(z0, x0, y0)];
     }
 
-    if (!parent || !parent.source) return null;
+    getTile(z, x, y) {
+        z = +z;
+        x = +x;
+        y = +y;
 
-    // if we found a parent tile containing the original geometry, we can drill down from it
-    if (debug > 1) console.log('found parent tile z%d-%d-%d', z0, x0, y0);
+        const options = this.options;
+        const {extent, debug} = options;
 
-    if (debug > 1) console.time('drilling down');
-    this.splitTile(parent.source, z0, x0, y0, z, x, y);
-    if (debug > 1) console.timeEnd('drilling down');
+        if (z < 0 || z > 24) return null;
 
-    return this.tiles[id] ? transformTile(this.tiles[id], extent) : null;
-};
+        const z2 = 1 << z;
+        x = (x + z2) & (z2 - 1); // wrap tile x coordinate
+
+        const id = toID(z, x, y);
+        if (this.tiles[id]) return transformTile(this.tiles[id], extent);
+
+        if (debug > 1) console.log('drilling down to z%d-%d-%d', z, x, y);
+
+        let z0 = z;
+        let x0 = x;
+        let y0 = y;
+        let parent;
+
+        while (!parent && z0 > 0) {
+            z0--;
+            x0 = x0 >> 1;
+            y0 = y0 >> 1;
+            parent = this.tiles[toID(z0, x0, y0)];
+        }
+
+        if (!parent || !parent.source) return null;
+
+        // if we found a parent tile containing the original geometry, we can drill down from it
+        if (debug > 1) {
+            console.log('found parent tile z%d-%d-%d', z0, x0, y0);
+            console.time('drilling down');
+        }
+        this.splitTile(parent.source, z0, x0, y0, z, x, y);
+        if (debug > 1) console.timeEnd('drilling down');
+
+        return this.tiles[id] ? transformTile(this.tiles[id], extent) : null;
+    }
+}
 
 function toID(z, x, y) {
     return (((1 << z) * y + x) * 32) + z;
 }
 
 function extend(dest, src) {
-    for (var i in src) dest[i] = src[i];
+    for (const i in src) dest[i] = src[i];
     return dest;
+}
+
+function geojsonvt(data, options) {
+    return new GeoJSONVT(data, options);
 }
 
 function getFeatureId(feature, promoteId) {
@@ -35976,7 +36056,7 @@ define('index', ['exports', './shared'], (function (exports, performance$1) { 'u
 
 var name = "maplibre-gl";
 var description = "BSD licensed community fork of mapbox-gl, a WebGL interactive maps library";
-var version$2 = "4.4.0";
+var version$2 = "4.7.0";
 var main = "dist/maplibre-gl.js";
 var style = "dist/maplibre-gl.css";
 var license = "BSD-3-Clause";
@@ -35999,30 +36079,29 @@ var dependencies = {
 	"@mapbox/unitbezier": "^0.0.1",
 	"@mapbox/vector-tile": "^1.3.1",
 	"@mapbox/whoots-js": "^3.1.0",
-	"@maplibre/maplibre-gl-style-spec": "^20.3.0",
+	"@maplibre/maplibre-gl-style-spec": "^20.3.1",
 	"@types/geojson": "^7946.0.14",
 	"@types/geojson-vt": "3.2.5",
-	"@types/junit-report-builder": "^3.0.2",
 	"@types/mapbox__point-geometry": "^0.1.4",
 	"@types/mapbox__vector-tile": "^1.3.4",
 	"@types/pbf": "^3.0.5",
 	"@types/supercluster": "^7.1.3",
-	earcut: "^2.2.4",
-	"geojson-vt": "^3.2.1",
+	earcut: "^3.0.0",
+	"geojson-vt": "^4.0.2",
 	"gl-matrix": "^3.4.3",
-	"global-prefix": "^3.0.0",
+	"global-prefix": "^4.0.0",
 	kdbush: "^4.0.2",
 	"murmurhash-js": "^1.0.0",
-	pbf: "^3.2.1",
+	pbf: "^3.3.0",
 	potpack: "^2.0.0",
-	quickselect: "^2.0.0",
+	quickselect: "^3.0.0",
 	supercluster: "^8.0.1",
-	tinyqueue: "^2.0.3",
+	tinyqueue: "^3.0.0",
 	"vt-pbf": "^3.1.3"
 };
 var devDependencies = {
-	autoprefixer: "^10.4.19",
-	"@mapbox/mapbox-gl-rtl-text": "^0.2.3",
+	autoprefixer: "^10.4.20",
+	"@mapbox/mapbox-gl-rtl-text": "^0.3.0",
 	"@mapbox/mvt-fixtures": "^3.10.0",
 	"@rollup/plugin-commonjs": "^26.0.1",
 	"@rollup/plugin-json": "^6.1.0",
@@ -36034,7 +36113,7 @@ var devDependencies = {
 	"@types/benchmark": "^2.1.5",
 	"@types/cssnano": "^5.0.0",
 	"@types/d3": "^7.4.3",
-	"@types/diff": "^5.2.1",
+	"@types/diff": "^5.2.2",
 	"@types/earcut": "^2.1.4",
 	"@types/eslint": "^8.56.7",
 	"@types/gl": "^6.0.5",
@@ -36043,84 +36122,76 @@ var devDependencies = {
 	"@types/jsdom": "^21.1.7",
 	"@types/minimist": "^1.2.5",
 	"@types/murmurhash-js": "^1.0.6",
-	"@types/nise": "^1.4.4",
-	"@types/node": "^20.14.1",
+	"@types/nise": "^1.4.5",
+	"@types/node": "^22.5.4",
 	"@types/offscreencanvas": "^2019.7.3",
 	"@types/pixelmatch": "^5.2.6",
 	"@types/pngjs": "^6.0.5",
-	"@types/react": "^18.3.3",
+	"@types/react": "^18.3.5",
 	"@types/react-dom": "^18.3.0",
 	"@types/request": "^2.48.12",
 	"@types/shuffle-seed": "^1.1.3",
 	"@types/window-or-global": "^1.0.6",
-	"@typescript-eslint/eslint-plugin": "^7.13.0",
-	"@typescript-eslint/parser": "^7.13.0",
-	address: "^2.0.2",
+	"@typescript-eslint/eslint-plugin": "^7.18.0",
+	"@typescript-eslint/parser": "^7.18.0",
+	address: "^2.0.3",
 	benchmark: "^2.1.4",
 	canvas: "^2.11.2",
-	cssnano: "^7.0.2",
+	cssnano: "^7.0.6",
 	d3: "^7.9.0",
 	"d3-queue": "^3.0.7",
-	"devtools-protocol": "^0.0.1312386",
-	diff: "^5.2.0",
+	"devtools-protocol": "^0.0.1351223",
+	diff: "^6.0.0",
 	"dts-bundle-generator": "^9.5.1",
 	eslint: "^8.57.0",
 	"eslint-config-mourner": "^3.0.0",
 	"eslint-plugin-html": "^8.1.1",
-	"eslint-plugin-import": "^2.29.1",
-	"eslint-plugin-jest": "^28.6.0",
-	"eslint-plugin-react": "^7.34.2",
+	"eslint-plugin-import": "^2.30.0",
+	"eslint-plugin-jest": "^28.8.3",
+	"eslint-plugin-react": "^7.35.2",
 	"eslint-plugin-tsdoc": "0.3.0",
 	expect: "^29.7.0",
-	glob: "^10.4.1",
+	glob: "^11.0.0",
 	"is-builtin-module": "^4.0.0",
 	jest: "^29.7.0",
 	"jest-environment-jsdom": "^29.7.0",
 	"jest-junit": "^16.0.0",
-	"jest-monocart-coverage": "^1.1.0",
+	"jest-monocart-coverage": "^1.1.1",
 	"jest-webgl-canvas-mock": "^2.5.3",
-	jsdom: "^24.1.0",
-	"junit-report-builder": "^3.2.1",
+	jsdom: "^25.0.0",
+	"junit-report-builder": "^5.0.0",
 	minimist: "^1.2.8",
 	"mock-geolocation": "^1.0.11",
-	"monocart-coverage-reports": "^2.8.3",
+	"monocart-coverage-reports": "^2.10.3",
 	nise: "^6.0.0",
 	"npm-font-open-sans": "^1.1.0",
 	"npm-run-all": "^4.1.5",
-	"pdf-merger-js": "^5.1.1",
-	pixelmatch: "^5.3.0",
+	"pdf-merger-js": "^5.1.2",
+	pixelmatch: "^6.0.0",
 	pngjs: "^7.0.0",
-	postcss: "^8.4.38",
+	postcss: "^8.4.45",
 	"postcss-cli": "^11.0.0",
 	"postcss-inline-svg": "^6.0.0",
 	"pretty-bytes": "^6.1.1",
-	puppeteer: "^22.11.0",
+	puppeteer: "^23.3.0",
 	react: "^18.3.1",
 	"react-dom": "^18.3.1",
-	rollup: "^4.18.0",
+	rollup: "^4.21.2",
 	"rollup-plugin-sourcemaps": "^0.6.3",
 	rw: "^1.3.3",
-	semver: "^7.6.2",
+	semver: "^7.6.3",
 	"shuffle-seed": "^1.1.6",
 	"source-map-explorer": "^2.5.3",
 	st: "^3.0.0",
-	stylelint: "^16.6.1",
-	"stylelint-config-standard": "^36.0.0",
-	"ts-jest": "^29.1.4",
+	stylelint: "^16.9.0",
+	"stylelint-config-standard": "^36.0.1",
+	"ts-jest": "^29.2.5",
 	"ts-node": "^10.9.2",
-	tslib: "^2.6.3",
-	typedoc: "^0.25.13",
-	"typedoc-plugin-markdown": "^4.0.3",
-	"typedoc-plugin-missing-exports": "^2.3.0",
-	typescript: "^5.4.5"
-};
-var overrides = {
-	"postcss-inline-svg": {
-		"css-select": "^5.1.0",
-		"dom-serializer": "^2.0.0",
-		htmlparser2: "^8.0.1",
-		"postcss-value-parser": "^4.2.0"
-	}
+	tslib: "^2.7.0",
+	typedoc: "^0.26.6",
+	"typedoc-plugin-markdown": "^4.2.7",
+	"typedoc-plugin-missing-exports": "^3.0.0",
+	typescript: "^5.5.4"
 };
 var scripts = {
 	"generate-dist-package": "node --no-warnings --loader ts-node/esm build/generate-dist-package.js",
@@ -36188,7 +36259,6 @@ var packageJSON = {
 	type: type,
 	dependencies: dependencies,
 	devDependencies: devDependencies,
-	overrides: overrides,
 	scripts: scripts,
 	files: files,
 	engines: engines
@@ -37284,13 +37354,14 @@ class GlyphManager {
         });
     }
     _doesCharSupportLocalGlyph(id) {
-        /* eslint-disable new-cap */
+        // The CJK Unified Ideographs blocks and Hangul Syllables blocks are
+        // spread across many glyph PBFs and are typically accessed very
+        // randomly. Preferring local rendering for these blocks reduces
+        // wasteful bandwidth consumption. For visual consistency within CJKV
+        // text, also include any other CJKV or siniform ideograph or hangul,
+        // hiragana, or katakana character.
         return !!this.localIdeographFontFamily &&
-            (performance$1.unicodeBlockLookup['CJK Unified Ideographs'](id) ||
-                performance$1.unicodeBlockLookup['Hangul Syllables'](id) ||
-                performance$1.unicodeBlockLookup['Hiragana'](id) ||
-                performance$1.unicodeBlockLookup['Katakana'](id));
-        /* eslint-enable new-cap */
+            /\p{Ideo}|\p{sc=Hang}|\p{sc=Hira}|\p{sc=Kana}/u.test(String.fromCodePoint(id));
     }
     _tinySDF(entry, stack, id) {
         const fontFamily = this.localIdeographFontFamily;
@@ -37373,7 +37444,7 @@ class LightPositionProperty {
         };
     }
 }
-const TRANSITION_SUFFIX = '-transition';
+const TRANSITION_SUFFIX$1 = '-transition';
 let lightProperties;
 /*
  * Represents the light used to light extruded features.
@@ -37400,8 +37471,8 @@ class Light extends performance$1.Evented {
         }
         for (const name in light) {
             const value = light[name];
-            if (name.endsWith(TRANSITION_SUFFIX)) {
-                this._transitionable.setTransition(name.slice(0, -TRANSITION_SUFFIX.length), value);
+            if (name.endsWith(TRANSITION_SUFFIX$1)) {
+                this._transitionable.setTransition(name.slice(0, -TRANSITION_SUFFIX$1.length), value);
             }
             else {
                 this._transitionable.setValue(name, value);
@@ -37427,6 +37498,88 @@ class Light extends performance$1.Evented {
             style: { glyphs: true, sprite: true },
             styleSpec: performance$1.v8Spec
         }));
+    }
+}
+
+const properties = new performance$1.Properties({
+    'sky-color': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['sky-color']),
+    'horizon-color': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['horizon-color']),
+    'fog-color': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['fog-color']),
+    'fog-ground-blend': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['fog-ground-blend']),
+    'horizon-fog-blend': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['horizon-fog-blend']),
+    'sky-horizon-blend': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['sky-horizon-blend']),
+    'atmosphere-blend': new performance$1.DataConstantProperty(performance$1.v8Spec.sky['atmosphere-blend'])
+});
+const TRANSITION_SUFFIX = '-transition';
+class Sky extends performance$1.Evented {
+    constructor(sky) {
+        super();
+        this._transitionable = new performance$1.Transitionable(properties);
+        this.setSky(sky);
+        this._transitioning = this._transitionable.untransitioned();
+        this.recalculate(new performance$1.EvaluationParameters(0));
+    }
+    setSky(sky, options = {}) {
+        if (this._validate(performance$1.validateSky, sky, options))
+            return;
+        if (!sky) {
+            sky = {
+                'sky-color': 'transparent',
+                'horizon-color': 'transparent',
+                'fog-color': 'transparent',
+                'fog-ground-blend': 1,
+                'atmosphere-blend': 0,
+            };
+        }
+        for (const name in sky) {
+            const value = sky[name];
+            if (name.endsWith(TRANSITION_SUFFIX)) {
+                this._transitionable.setTransition(name.slice(0, -TRANSITION_SUFFIX.length), value);
+            }
+            else {
+                this._transitionable.setValue(name, value);
+            }
+        }
+    }
+    getSky() {
+        return this._transitionable.serialize();
+    }
+    updateTransitions(parameters) {
+        this._transitioning = this._transitionable.transitioned(parameters, this._transitioning);
+    }
+    hasTransition() {
+        return this._transitioning.hasTransition();
+    }
+    recalculate(parameters) {
+        this.properties = this._transitioning.possiblyEvaluate(parameters);
+    }
+    _validate(validate, value, options = {}) {
+        if ((options === null || options === void 0 ? void 0 : options.validate) === false) {
+            return false;
+        }
+        return performance$1.emitValidationErrors(this, validate.call(performance$1.validateStyle, performance$1.extend({
+            value,
+            // Workaround for https://github.com/mapbox/mapbox-gl-js/issues/2407
+            style: { glyphs: true, sprite: true },
+            styleSpec: performance$1.v8Spec
+        })));
+    }
+    /**
+     * Currently fog is a very simple implementation, and should only used
+     * to create an atmosphere near the horizon.
+     * But because the fog is drawn from the far-clipping-plane to
+     * map-center, and because the fog does nothing know about the horizon,
+     * this method does a fadeout in respect of pitch. So, when the horizon
+     * gets out of view, which is at about pitch 70, this methods calculates
+     * the corresponding opacity values. Below pitch 60 the fog is completely
+     * invisible.
+     */
+    calculateFogBlendOpacity(pitch) {
+        if (pitch < 60)
+            return 0; // disable
+        if (pitch < 70)
+            return (pitch - 60) / 10; // fade in
+        return 1;
     }
 }
 
@@ -38220,6 +38373,25 @@ class LngLatBounds {
         const latAccuracy = 360 * radius / earthCircumferenceInMetersAtEquator, lngAccuracy = latAccuracy / Math.cos((Math.PI / 180) * center.lat);
         return new LngLatBounds(new performance$1.LngLat(center.lng - lngAccuracy, center.lat - latAccuracy), new performance$1.LngLat(center.lng + lngAccuracy, center.lat + latAccuracy));
     }
+    /**
+     * Adjusts the given bounds to handle the case where the bounds cross the 180th meridian (antimeridian).
+     *
+     * @returns The adjusted LngLatBounds
+     * @example
+     * ```ts
+     * let bounds = new LngLatBounds([175.813127, -20.157768], [-178. 340903, -15.449124]);
+     * let adjustedBounds = bounds.adjustAntiMeridian();
+     * // adjustedBounds will be: [[175.813127, -20.157768], [181.659097, -15.449124]]
+     * ```
+     */
+    adjustAntiMeridian() {
+        const sw = new performance$1.LngLat(this._sw.lng, this._sw.lat);
+        const ne = new performance$1.LngLat(this._ne.lng, this._ne.lat);
+        if (sw.lng > ne.lng) {
+            return new LngLatBounds(sw, new performance$1.LngLat(ne.lng + 360, ne.lat));
+        }
+        return new LngLatBounds(sw, ne);
+    }
 }
 
 class TileBounds {
@@ -38620,9 +38792,6 @@ class RasterTileSource extends performance$1.Evented {
                     else {
                         tile.texture = new Texture(context, img, gl.RGBA, { useMipmap: true });
                         tile.texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE, gl.LINEAR_MIPMAP_NEAREST);
-                        if (context.extTextureFilterAnisotropic) {
-                            gl.texParameterf(gl.TEXTURE_2D, context.extTextureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT, context.extTextureFilterAnisotropicMax);
-                        }
                     }
                     tile.state = 'loaded';
                 }
@@ -38852,7 +39021,7 @@ class RasterDEMTileSource extends RasterTileSource {
  * ```
  * @see [Draw GeoJSON points](https://maplibre.org/maplibre-gl-js/docs/examples/geojson-markers/)
  * @see [Add a GeoJSON line](https://maplibre.org/maplibre-gl-js/docs/examples/geojson-line/)
- * @see [Create a heatmap from points](https://maplibre.org/maplibre-gl-js/docs/examples/heatmap/)
+ * @see [Create a heatmap from points](https://maplibre.org/maplibre-gl-js/docs/examples/heatmap-layer/)
  * @see [Create and style clusters](https://maplibre.org/maplibre-gl-js/docs/examples/cluster/)
  */
 class GeoJSONSource extends performance$1.Evented {
@@ -38883,6 +39052,9 @@ class GeoJSONSource extends performance$1.Evented {
             this.attribution = options.attribution;
         this.promoteId = options.promoteId;
         const scale = performance$1.EXTENT / this.tileSize;
+        if (options.clusterMaxZoom !== undefined && this.maxzoom <= options.clusterMaxZoom) {
+            performance$1.warnOnce(`The maxzoom value "${this.maxzoom}" is expected to be greater than the clusterMaxZoom value "${options.clusterMaxZoom}".`);
+        }
         // sent to the worker, along with `url: ...` or `data: literal geojson`,
         // so that it can load/parse/index the geojson data
         // extending with `options.workerOptions` helps to make it easy for
@@ -39769,7 +39941,7 @@ const setSourceType = (name, type) => {
 /**
  * Adds a custom source type, making it available for use with {@link Map#addSource}.
  * @param name - The name of the source type; source definition objects use this name in the `{type: ...}` field.
- * @param sourceType - A {@link SourceClass} - which is a constructor for the `Source` interface.
+ * @param SourceType - A {@link SourceClass} - which is a constructor for the `Source` interface.
  * @returns a promise that is resolved when the source type is ready or rejected with an error.
  */
 const addSourceType = (name, SourceType) => performance$1.__awaiter(void 0, void 0, void 0, function* () {
@@ -41865,14 +42037,14 @@ function getGlCoordMatrix(posMatrix, pitchWithMap, rotateWithMap, transform, pix
         return transform.glCoordMatrix;
     }
 }
-function project(point, matrix, getElevation) {
+function project(x, y, matrix, getElevation) {
     let pos;
     if (getElevation) { // slow because of handle z-index
-        pos = [point.x, point.y, getElevation(point.x, point.y), 1];
+        pos = [x, y, getElevation(x, y), 1];
         performance$1.transformMat4(pos, pos, matrix);
     }
     else { // fast because of ignore z-index
-        pos = [point.x, point.y, 0, 1];
+        pos = [x, y, 0, 1];
         xyTransformMat4(pos, pos, matrix);
     }
     const w = pos[3];
@@ -41919,7 +42091,7 @@ function updateLineLabels(bucket, posMatrix, painter, isText, labelPlaneMatrix, 
         }
         // Awkward... but we're counting on the paired "vertical" symbol coming immediately after its horizontal counterpart
         useVertical = false;
-        const anchorPos = project(new performance$1.Point(symbol.anchorX, symbol.anchorY), posMatrix, getElevation);
+        const anchorPos = project(symbol.anchorX, symbol.anchorY, posMatrix, getElevation);
         // Don't bother calculating the correct point for invisible labels.
         if (!isVisible(anchorPos.point, clippingBuffer)) {
             hideGlyphs(symbol.numGlyphs, dynamicLayoutVertexArray);
@@ -42029,8 +42201,8 @@ function placeGlyphsAlongLine(projectionContext, symbol, fontSize, flip, keepUpr
         if (!firstAndLastGlyph) {
             return { notEnoughRoom: true };
         }
-        const firstPoint = project(firstAndLastGlyph.first.point, glCoordMatrix, projectionContext.getElevation).point;
-        const lastPoint = project(firstAndLastGlyph.last.point, glCoordMatrix, projectionContext.getElevation).point;
+        const firstPoint = project(firstAndLastGlyph.first.point.x, firstAndLastGlyph.first.point.y, glCoordMatrix, projectionContext.getElevation).point;
+        const lastPoint = project(firstAndLastGlyph.last.point.x, firstAndLastGlyph.last.point.y, glCoordMatrix, projectionContext.getElevation).point;
         if (keepUpright && !flip) {
             const orientationChange = requiresOrientationChange(symbol.writingMode, firstPoint, lastPoint, aspectRatio);
             if (orientationChange) {
@@ -42048,10 +42220,10 @@ function placeGlyphsAlongLine(projectionContext, symbol, fontSize, flip, keepUpr
         // Only a single glyph to place
         // So, determine whether to flip based on projected angle of the line segment it's on
         if (keepUpright && !flip) {
-            const a = project(projectionContext.tileAnchorPoint, posMatrix, projectionContext.getElevation).point;
+            const a = project(projectionContext.tileAnchorPoint.x, projectionContext.tileAnchorPoint.y, posMatrix, projectionContext.getElevation).point;
             const tileVertexIndex = (symbol.lineStartIndex + symbol.segment + 1);
             const tileSegmentEnd = new performance$1.Point(projectionContext.lineVertexArray.getx(tileVertexIndex), projectionContext.lineVertexArray.gety(tileVertexIndex));
-            const projectedVertex = project(tileSegmentEnd, posMatrix, projectionContext.getElevation);
+            const projectedVertex = project(tileSegmentEnd.x, tileSegmentEnd.y, posMatrix, projectionContext.getElevation);
             // We know the anchor will be in the viewport, but the end of the line segment may be
             // behind the plane of the camera, in which case we can use a point at any arbitrary (closer)
             // point on the segment.
@@ -42116,7 +42288,7 @@ function _projectTruncatedLineSegment(previousTilePoint, currentTilePoint, previ
     // plane of the camera.
     const unitVertexToBeProjected = previousTilePoint.add(previousTilePoint.sub(currentTilePoint)._unit());
     const projectedUnitVertex = projectionMatrix !== undefined ?
-        project(unitVertexToBeProjected, projectionMatrix, projectionContext.getElevation).point :
+        project(unitVertexToBeProjected.x, unitVertexToBeProjected.y, projectionMatrix, projectionContext.getElevation).point :
         projectTileCoordinatesToViewport(unitVertexToBeProjected.x, unitVertexToBeProjected.y, projectionContext).point;
     const projectedUnitSegment = previousProjectedPoint.sub(projectedUnitVertex);
     return previousProjectedPoint.add(projectedUnitSegment._mult(minimumLength / projectedUnitSegment.mag()));
@@ -42159,7 +42331,7 @@ function projectTileCoordinatesToViewport(x, y, projectionContext) {
         projection.point.y = (-projection.point.y * 0.5 + 0.5) * projectionContext.height;
     }
     else {
-        projection = project(new performance$1.Point(translatedX, translatedY), projectionContext.labelPlaneMatrix, projectionContext.getElevation);
+        projection = project(translatedX, translatedY, projectionContext.labelPlaneMatrix, projectionContext.getElevation);
         projection.isOccluded = false;
     }
     return projection;
@@ -42362,7 +42534,25 @@ class CollisionIndex {
         const x = collisionBox.anchorPointX + translation[0];
         const y = collisionBox.anchorPointY + translation[1];
         const projectedPoint = this.projectAndGetPerspectiveRatio(posMatrix, x, y, unwrappedTileID, getElevation);
-        const projectedBox = this._projectCollisionBox(collisionBox, textPixelRatio, posMatrix, unwrappedTileID, pitchWithMap, rotateWithMap, translation, projectedPoint, getElevation, shift);
+        const tileToViewport = textPixelRatio * projectedPoint.perspectiveRatio;
+        let projectedBox;
+        if (!pitchWithMap && !rotateWithMap) {
+            // Fast path for common symbols
+            const pointX = projectedPoint.point.x + (shift ? shift.x * tileToViewport : 0);
+            const pointY = projectedPoint.point.y + (shift ? shift.y * tileToViewport : 0);
+            projectedBox = {
+                allPointsOccluded: false,
+                box: [
+                    pointX + collisionBox.x1 * tileToViewport,
+                    pointY + collisionBox.y1 * tileToViewport,
+                    pointX + collisionBox.x2 * tileToViewport,
+                    pointY + collisionBox.y2 * tileToViewport,
+                ]
+            };
+        }
+        else {
+            projectedBox = this._projectCollisionBox(collisionBox, tileToViewport, posMatrix, unwrappedTileID, pitchWithMap, rotateWithMap, translation, projectedPoint, getElevation, shift);
+        }
         const [tlX, tlY, brX, brY] = projectedBox.box;
         const projectionOccluded = this.mapProjection.useSpecialProjectionForSymbols ? (pitchWithMap ? projectedBox.allPointsOccluded : this.mapProjection.isOccluded(x, y, unwrappedTileID)) : false;
         if (projectionOccluded || projectedPoint.perspectiveRatio < this.perspectiveRatioCutoff || !this.isInsideGrid(tlX, tlY, brX, brY) ||
@@ -42506,7 +42696,7 @@ class CollisionIndex {
         };
     }
     projectPathToScreenSpace(projectedPath, projectionContext, labelToScreenMatrix) {
-        return projectedPath.map(p => project(p, labelToScreenMatrix, projectionContext.getElevation));
+        return projectedPath.map(p => project(p.x, p.y, labelToScreenMatrix, projectionContext.getElevation));
     }
     /**
      * Because the geometries in the CollisionIndex are an approximation of the shape of
@@ -42577,25 +42767,34 @@ class CollisionIndex {
             grid.insertCircle(key, collisionCircles[k], collisionCircles[k + 1], collisionCircles[k + 2]);
         }
     }
-    projectAndGetPerspectiveRatio(posMatrix, x, y, unwrappedTileID, getElevation) {
-        const projected = this.mapProjection.useSpecialProjectionForSymbols ?
-            this.mapProjection.projectTileCoordinates(x, y, unwrappedTileID, getElevation) :
-            project(new performance$1.Point(x, y), posMatrix, getElevation);
+    projectAndGetPerspectiveRatio(posMatrix, x, y, _unwrappedTileID, getElevation) {
+        // The code here is duplicated from "projection.ts" for performance.
+        // Code here is subject to change once globe is merged.
+        let pos;
+        if (getElevation) { // slow because of handle z-index
+            pos = [x, y, getElevation(x, y), 1];
+            performance$1.transformMat4(pos, pos, posMatrix);
+        }
+        else { // fast because of ignore z-index
+            pos = [x, y, 0, 1];
+            xyTransformMat4(pos, pos, posMatrix);
+        }
+        const w = pos[3];
         return {
-            point: new performance$1.Point((((projected.point.x + 1) / 2) * this.transform.width) + viewportPadding, (((-projected.point.y + 1) / 2) * this.transform.height) + viewportPadding),
+            point: new performance$1.Point((((pos[0] / w + 1) / 2) * this.transform.width) + viewportPadding, (((-pos[1] / w + 1) / 2) * this.transform.height) + viewportPadding),
             // See perspective ratio comment in symbol_sdf.vertex
             // We're doing collision detection in viewport space so we need
             // to scale down boxes in the distance
-            perspectiveRatio: 0.5 + 0.5 * (this.transform.cameraToCenterDistance / projected.signedDistanceFromCamera),
-            isOccluded: projected.isOccluded,
-            signedDistanceFromCamera: projected.signedDistanceFromCamera
+            perspectiveRatio: 0.5 + 0.5 * (this.transform.cameraToCenterDistance / w),
+            isOccluded: false,
+            signedDistanceFromCamera: w
         };
     }
     getPerspectiveRatio(posMatrix, x, y, unwrappedTileID, getElevation) {
         // We don't care about the actual projected point, just its W component.
         const projected = this.mapProjection.useSpecialProjectionForSymbols ?
             this.mapProjection.projectTileCoordinates(x, y, unwrappedTileID, getElevation) :
-            project(new performance$1.Point(x, y), posMatrix, getElevation);
+            project(x, y, posMatrix, getElevation);
         return 0.5 + 0.5 * (this.transform.cameraToCenterDistance / projected.signedDistanceFromCamera);
     }
     isOffscreen(x1, y1, x2, y2) {
@@ -42617,8 +42816,7 @@ class CollisionIndex {
     /**
      * Applies all layout+paint properties of the given box in order to find as good approximation of its screen-space bounding box as possible.
      */
-    _projectCollisionBox(collisionBox, textPixelRatio, posMatrix, unwrappedTileID, pitchWithMap, rotateWithMap, translation, projectedPoint, getElevation, shift) {
-        const tileToViewport = textPixelRatio * projectedPoint.perspectiveRatio;
+    _projectCollisionBox(collisionBox, tileToViewport, posMatrix, unwrappedTileID, pitchWithMap, rotateWithMap, translation, projectedPoint, getElevation, shift) {
         // These vectors are valid both for screen space viewport-rotation-aligned texts and for pitch-align: map texts that are map-rotation-aligned.
         let vecEast = new performance$1.Point(1, 0);
         let vecSouth = new performance$1.Point(0, 1);
@@ -44124,12 +44322,13 @@ class Style extends performance$1.Evented {
             options.validate : true;
         const request = this.map._requestManager.transformRequest(url, "Style" /* ResourceType.Style */);
         this._loadStyleRequest = new AbortController();
+        const abortController = this._loadStyleRequest;
         performance$1.getJSON(request, this._loadStyleRequest).then((response) => {
             this._loadStyleRequest = null;
             this._load(response.data, options, previousStyle);
         }).catch((error) => {
             this._loadStyleRequest = null;
-            if (error) {
+            if (error && !abortController.signal.aborted) { // ignore abort
                 this.fire(new performance$1.ErrorEvent(error));
             }
         });
@@ -44167,6 +44366,7 @@ class Style extends performance$1.Evented {
         this.glyphManager.setURL(nextState.glyphs);
         this._createLayers();
         this.light = new Light(this.stylesheet.light);
+        this.sky = new Sky(this.stylesheet.sky);
         this.map.setTerrain((_a = this.stylesheet.terrain) !== null && _a !== void 0 ? _a : null);
         this.fire(new performance$1.Event('data', { dataType: 'style' }));
         this.fire(new performance$1.Event('style.load'));
@@ -44278,18 +44478,20 @@ class Style extends performance$1.Evented {
      * @hidden
      * take an array of string IDs, and based on this._layers, generate an array of LayerSpecification
      * @param ids - an array of string IDs, for which serialized layers will be generated. If omitted, all serialized layers will be returned
+     * @param returnClose - if true, return a clone of the layer object
      * @returns generated result
      */
-    _serializeByIds(ids) {
+    _serializeByIds(ids, returnClone = false) {
         const serializedLayersDictionary = this._serializedAllLayers();
         if (!ids || ids.length === 0) {
-            return Object.values(serializedLayersDictionary);
+            return returnClone ? Object.values(performance$1.clone$1(serializedLayersDictionary)) : Object.values(serializedLayersDictionary);
         }
         const serializedLayers = [];
         for (const id of ids) {
             // this check will skip all custom layers
             if (serializedLayersDictionary[id]) {
-                serializedLayers.push(serializedLayersDictionary[id]);
+                const toPush = returnClone ? performance$1.clone$1(serializedLayersDictionary[id]) : serializedLayersDictionary[id];
+                serializedLayers.push(toPush);
             }
         }
         return serializedLayers;
@@ -44316,6 +44518,9 @@ class Style extends performance$1.Evented {
     }
     hasTransitions() {
         if (this.light && this.light.hasTransition()) {
+            return true;
+        }
+        if (this.sky && this.sky.hasTransition()) {
             return true;
         }
         for (const id in this.sourceCaches) {
@@ -44368,6 +44573,7 @@ class Style extends performance$1.Evented {
                 this._layers[id].updateTransitions(parameters);
             }
             this.light.updateTransitions(parameters);
+            this.sky.updateTransitions(parameters);
             this._resetUpdates();
         }
         const sourcesUsedBefore = {};
@@ -44402,6 +44608,7 @@ class Style extends performance$1.Evented {
             }
         }
         this.light.recalculate(parameters);
+        this.sky.recalculate(parameters);
         this.z = parameters.zoom;
         if (changed) {
             this.fire(new performance$1.Event('data', { dataType: 'style' }));
@@ -44429,7 +44636,7 @@ class Style extends performance$1.Evented {
     }
     _updateWorkerLayers(updatedIds, removedIds) {
         this.dispatcher.broadcast("UL" /* MessageType.updateLayers */, {
-            layers: this._serializeByIds(updatedIds),
+            layers: this._serializeByIds(updatedIds, false),
             removedIds
         });
     }
@@ -44522,6 +44729,9 @@ class Style extends performance$1.Evented {
                     break;
                 case 'setSprite':
                     operations.push(() => this.setSprite.apply(this, op.args));
+                    break;
+                case 'setSky':
+                    operations.push(() => this.setSky.apply(this, op.args));
                     break;
                 case 'setTerrain':
                     operations.push(() => this.map.setTerrain.apply(this, op.args));
@@ -44952,7 +45162,7 @@ class Style extends performance$1.Evented {
         if (!this._loaded)
             return;
         const sources = performance$1.mapObject(this.sourceCaches, (source) => source.serialize());
-        const layers = this._serializeByIds(this._order);
+        const layers = this._serializeByIds(this._order, true);
         const terrain = this.map.getTerrain() || undefined;
         const myStyleSheet = this.stylesheet;
         return performance$1.filterObject({
@@ -44960,6 +45170,7 @@ class Style extends performance$1.Evented {
             name: myStyleSheet.name,
             metadata: myStyleSheet.metadata,
             light: myStyleSheet.light,
+            sky: myStyleSheet.sky,
             center: myStyleSheet.center,
             zoom: myStyleSheet.zoom,
             bearing: myStyleSheet.bearing,
@@ -45115,6 +45326,42 @@ class Style extends performance$1.Evented {
         };
         this.light.setLight(lightOptions, options);
         this.light.updateTransitions(parameters);
+    }
+    getSky() {
+        var _a;
+        return (_a = this.stylesheet) === null || _a === void 0 ? void 0 : _a.sky;
+    }
+    setSky(skyOptions, options = {}) {
+        const sky = this.getSky();
+        let update = false;
+        if (!skyOptions && !sky)
+            return;
+        if (skyOptions && !sky) {
+            update = true;
+        }
+        else if (!skyOptions && sky) {
+            update = true;
+        }
+        else {
+            for (const key in skyOptions) {
+                if (!performance$1.deepEqual(skyOptions[key], sky[key])) {
+                    update = true;
+                    break;
+                }
+            }
+        }
+        if (!update)
+            return;
+        const parameters = {
+            now: browser.now(),
+            transition: performance$1.extend({
+                duration: 300,
+                delay: 0
+            }, this.stylesheet.transition)
+        };
+        this.stylesheet.sky = skyOptions;
+        this.sky.setSky(skyOptions, options);
+        this.sky.updateTransitions(parameters);
     }
     _validate(validate, key, value, props, options = {}) {
         if (options && options.validate === false) {
@@ -45403,7 +45650,7 @@ var clippingMaskVert = 'attribute vec2 a_pos;uniform mat4 u_matrix;void main() {
 var heatmapFrag = 'uniform highp float u_intensity;varying vec2 v_extrude;\n#pragma mapbox: define highp float weight\n#define GAUSS_COEF 0.3989422804014327\nvoid main() {\n#pragma mapbox: initialize highp float weight\nfloat d=-0.5*3.0*3.0*dot(v_extrude,v_extrude);float val=weight*u_intensity*GAUSS_COEF*exp(d);gl_FragColor=vec4(val,1.0,1.0,1.0);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var heatmapVert = 'uniform mat4 u_matrix;uniform float u_extrude_scale;uniform float u_opacity;uniform float u_intensity;attribute vec2 a_pos;varying vec2 v_extrude;\n#pragma mapbox: define highp float weight\n#pragma mapbox: define mediump float radius\nconst highp float ZERO=1.0/255.0/16.0;\n#define GAUSS_COEF 0.3989422804014327\nvoid main(void) {\n#pragma mapbox: initialize highp float weight\n#pragma mapbox: initialize mediump float radius\nvec2 unscaled_extrude=vec2(mod(a_pos,2.0)*2.0-1.0);float S=sqrt(-2.0*log(ZERO/weight/u_intensity/GAUSS_COEF))/3.0;v_extrude=S*unscaled_extrude;vec2 extrude=v_extrude*radius*u_extrude_scale;vec4 pos=vec4(floor(a_pos*0.5)+extrude,0,1);gl_Position=u_matrix*pos;}';
+var heatmapVert = 'uniform mat4 u_matrix;uniform float u_extrude_scale;uniform float u_opacity;uniform float u_intensity;attribute vec2 a_pos;varying vec2 v_extrude;\n#pragma mapbox: define highp float weight\n#pragma mapbox: define mediump float radius\nconst highp float ZERO=1.0/255.0/16.0;\n#define GAUSS_COEF 0.3989422804014327\nvoid main(void) {\n#pragma mapbox: initialize highp float weight\n#pragma mapbox: initialize mediump float radius\nvec2 unscaled_extrude=vec2(mod(a_pos,2.0)*2.0-1.0);float S=sqrt(-2.0*log(ZERO/weight/u_intensity/GAUSS_COEF))/3.0;v_extrude=S*unscaled_extrude;vec2 extrude=v_extrude*radius*u_extrude_scale;vec4 pos=vec4(floor(a_pos*0.5)+extrude,get_elevation(floor(a_pos*0.5)),1);gl_Position=u_matrix*pos;}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var heatmapTextureFrag = 'uniform sampler2D u_image;uniform sampler2D u_color_ramp;uniform float u_opacity;varying vec2 v_pos;void main() {float t=texture2D(u_image,v_pos).r;vec4 color=texture2D(u_color_ramp,vec2(t,0.5));gl_FragColor=color*u_opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(0.0);\n#endif\n}';
@@ -45532,10 +45779,22 @@ var terrainDepthFrag = 'varying float v_depth;const highp vec4 bitSh=vec4(256.*2
 var terrainCoordsFrag = 'precision mediump float;uniform sampler2D u_texture;uniform float u_terrain_coords_id;varying vec2 v_texture_pos;void main() {vec4 rgba=texture2D(u_texture,v_texture_pos);gl_FragColor=vec4(rgba.r,rgba.g,rgba.b,u_terrain_coords_id);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var terrainFrag = 'uniform sampler2D u_texture;varying vec2 v_texture_pos;void main() {gl_FragColor=texture2D(u_texture,v_texture_pos);}';
+var terrainFrag = 'uniform sampler2D u_texture;uniform vec4 u_fog_color;uniform vec4 u_horizon_color;uniform float u_fog_ground_blend;uniform float u_fog_ground_blend_opacity;uniform float u_horizon_fog_blend;varying vec2 v_texture_pos;varying float v_fog_depth;const float gamma=2.2;vec4 gammaToLinear(vec4 color) {return pow(color,vec4(gamma));}vec4 linearToGamma(vec4 color) {return pow(color,vec4(1.0/gamma));}void main() {vec4 surface_color=texture2D(u_texture,v_texture_pos);if (v_fog_depth > u_fog_ground_blend) {vec4 surface_color_linear=gammaToLinear(surface_color);float blend_color=smoothstep(0.0,1.0,max((v_fog_depth-u_horizon_fog_blend)/(1.0-u_horizon_fog_blend),0.0));vec4 fog_horizon_color_linear=mix(gammaToLinear(u_fog_color),gammaToLinear(u_horizon_color),blend_color);float factor_fog=max(v_fog_depth-u_fog_ground_blend,0.0)/(1.0-u_fog_ground_blend);gl_FragColor=linearToGamma(mix(surface_color_linear,fog_horizon_color_linear,pow(factor_fog,2.0)*u_fog_ground_blend_opacity));} else {gl_FragColor=surface_color;}}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var terrainVert = 'attribute vec3 a_pos3d;uniform mat4 u_matrix;uniform float u_ele_delta;varying vec2 v_texture_pos;varying float v_depth;void main() {float extent=8192.0;float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;v_texture_pos=a_pos3d.xy/extent;gl_Position=u_matrix*vec4(a_pos3d.xy,get_elevation(a_pos3d.xy)-ele_delta,1.0);v_depth=gl_Position.z/gl_Position.w;}';
+var terrainDepthVert = 'attribute vec3 a_pos3d;uniform mat4 u_matrix;uniform float u_ele_delta;varying float v_depth;void main() {float ele=get_elevation(a_pos3d.xy);float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;gl_Position=u_matrix*vec4(a_pos3d.xy,ele-ele_delta,1.0);v_depth=gl_Position.z/gl_Position.w;}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var terrainCoordsVert = 'attribute vec3 a_pos3d;uniform mat4 u_matrix;uniform float u_ele_delta;varying vec2 v_texture_pos;void main() {float ele=get_elevation(a_pos3d.xy);float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;v_texture_pos=a_pos3d.xy/8192.0;gl_Position=u_matrix*vec4(a_pos3d.xy,ele-ele_delta,1.0);}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var terrainVert = 'attribute vec3 a_pos3d;uniform mat4 u_matrix;uniform mat4 u_fog_matrix;uniform float u_ele_delta;varying vec2 v_texture_pos;varying float v_fog_depth;void main() {float ele=get_elevation(a_pos3d.xy);float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;v_texture_pos=a_pos3d.xy/8192.0;gl_Position=u_matrix*vec4(a_pos3d.xy,ele-ele_delta,1.0);vec4 pos=u_fog_matrix*vec4(a_pos3d.xy,ele,1.0);v_fog_depth=pos.z/pos.w*0.5+0.5;}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var skyFrag = 'uniform vec4 u_sky_color;uniform vec4 u_horizon_color;uniform float u_horizon;uniform float u_sky_horizon_blend;void main() {float y=gl_FragCoord.y;if (y > u_horizon) {float blend=y-u_horizon;if (blend < u_sky_horizon_blend) {gl_FragColor=mix(u_sky_color,u_horizon_color,pow(1.0-blend/u_sky_horizon_blend,2.0));} else {gl_FragColor=u_sky_color;}}}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var skyVert = 'attribute vec2 a_pos;void main() {gl_Position=vec4(a_pos,1.0,1.0);}';
 
 // Disable Flow annotations here because Flow doesn't support importing GLSL files
 const shaders = {
@@ -45566,8 +45825,9 @@ const shaders = {
     symbolSDF: compile(symbolSDFFrag, symbolSDFVert),
     symbolTextAndIcon: compile(symbolTextAndIconFrag, symbolTextAndIconVert),
     terrain: compile(terrainFrag, terrainVert),
-    terrainDepth: compile(terrainDepthFrag, terrainVert),
-    terrainCoords: compile(terrainCoordsFrag, terrainVert)
+    terrainDepth: compile(terrainDepthFrag, terrainDepthVert),
+    terrainCoords: compile(terrainCoordsFrag, terrainCoordsVert),
+    sky: compile(skyFrag, skyVert)
 };
 // Expand #pragmas to #ifdefs.
 function compile(fragmentSource, vertexSource) {
@@ -45793,7 +46053,13 @@ const terrainPreludeUniforms = (context, locations) => ({
 const terrainUniforms = (context, locations) => ({
     'u_matrix': new performance$1.UniformMatrix4f(context, locations.u_matrix),
     'u_texture': new performance$1.Uniform1i(context, locations.u_texture),
-    'u_ele_delta': new performance$1.Uniform1f(context, locations.u_ele_delta)
+    'u_ele_delta': new performance$1.Uniform1f(context, locations.u_ele_delta),
+    'u_fog_matrix': new performance$1.UniformMatrix4f(context, locations.u_fog_matrix),
+    'u_fog_color': new performance$1.UniformColor(context, locations.u_fog_color),
+    'u_fog_ground_blend': new performance$1.Uniform1f(context, locations.u_fog_ground_blend),
+    'u_fog_ground_blend_opacity': new performance$1.Uniform1f(context, locations.u_fog_ground_blend_opacity),
+    'u_horizon_color': new performance$1.UniformColor(context, locations.u_horizon_color),
+    'u_horizon_fog_blend': new performance$1.Uniform1f(context, locations.u_horizon_fog_blend)
 });
 const terrainDepthUniforms = (context, locations) => ({
     'u_matrix': new performance$1.UniformMatrix4f(context, locations.u_matrix),
@@ -45805,10 +46071,16 @@ const terrainCoordsUniforms = (context, locations) => ({
     'u_terrain_coords_id': new performance$1.Uniform1f(context, locations.u_terrain_coords_id),
     'u_ele_delta': new performance$1.Uniform1f(context, locations.u_ele_delta)
 });
-const terrainUniformValues = (matrix, eleDelta) => ({
+const terrainUniformValues = (matrix, eleDelta, fogMatrix, sky, pitch) => ({
     'u_matrix': matrix,
     'u_texture': 0,
-    'u_ele_delta': eleDelta
+    'u_ele_delta': eleDelta,
+    'u_fog_matrix': fogMatrix,
+    'u_fog_color': sky ? sky.properties.get('fog-color') : performance$1.Color.white,
+    'u_fog_ground_blend': sky ? sky.properties.get('fog-ground-blend') : 1,
+    'u_fog_ground_blend_opacity': sky ? sky.calculateFogBlendOpacity(pitch) : 0,
+    'u_horizon_color': sky ? sky.properties.get('horizon-color') : performance$1.Color.white,
+    'u_horizon_fog_blend': sky ? sky.properties.get('horizon-fog-blend') : 1
 });
 const terrainDepthUniformValues = (matrix, eleDelta) => ({
     'u_matrix': matrix,
@@ -46549,6 +46821,19 @@ const backgroundPatternUniformValues = (matrix, opacity, painter, image, tile, c
     'u_opacity': opacity
 });
 
+const skyUniforms = (context, locations) => ({
+    'u_sky_color': new performance$1.UniformColor(context, locations.u_sky_color),
+    'u_horizon_color': new performance$1.UniformColor(context, locations.u_horizon_color),
+    'u_horizon': new performance$1.Uniform1f(context, locations.u_horizon),
+    'u_sky_horizon_blend': new performance$1.Uniform1f(context, locations.u_sky_horizon_blend),
+});
+const skyUniformValues = (sky, transform, pixelRatio) => ({
+    'u_sky_color': sky.properties.get('sky-color'),
+    'u_horizon_color': sky.properties.get('horizon-color'),
+    'u_horizon': (transform.height / 2 + transform.getHorizon()) * pixelRatio,
+    'u_sky_horizon_blend': (sky.properties.get('sky-horizon-blend') * transform.height / 2) * pixelRatio,
+});
+
 const programUniforms = {
     fillExtrusion: fillExtrusionUniforms,
     fillExtrusionPattern: fillExtrusionPatternUniforms,
@@ -46577,7 +46862,8 @@ const programUniforms = {
     backgroundPattern: backgroundPatternUniforms,
     terrain: terrainUniforms,
     terrainDepth: terrainDepthUniforms,
-    terrainCoords: terrainCoordsUniforms
+    terrainCoords: terrainCoordsUniforms,
+    sky: skyUniforms
 };
 
 /**
@@ -47689,7 +47975,7 @@ function getShiftedAnchor(projectedAnchorPoint, projectionContext, rotateWithMap
             adjustedShift = adjustedShift.rotate(-transformAngle);
         }
         const tileAnchorShifted = translatedAnchor.add(adjustedShift);
-        return project(tileAnchorShifted, projectionContext.labelPlaneMatrix, projectionContext.getElevation).point;
+        return project(tileAnchorShifted.x, tileAnchorShifted.y, projectionContext.labelPlaneMatrix, projectionContext.getElevation).point;
     }
     else {
         if (rotateWithMap) {
@@ -47736,7 +48022,7 @@ function updateVariableAnchorsForBucket(bucket, rotateWithMap, pitchWithMap, var
                 unwrappedTileID
             };
             const projectedAnchor = pitchWithMap ?
-                project(tileAnchor, posMatrix, getElevation) :
+                project(tileAnchor.x, tileAnchor.y, posMatrix, getElevation) :
                 projectTileCoordinatesToViewport(tileAnchor.x, tileAnchor.y, projectionContext);
             const perspectiveRatio = getPerspectiveRatio(transform.cameraToCenterDistance, projectedAnchor.signedDistanceFromCamera);
             let renderTextSize = performance$1.evaluateSizeForFeature(bucket.textSizeData, size, symbol) * perspectiveRatio / performance$1.ONE_EM;
@@ -48013,92 +48299,164 @@ function drawCircles(painter, sourceCache, layer, coords) {
     }
 }
 
-function drawHeatmap(painter, sourceCache, layer, coords) {
+function drawHeatmap(painter, sourceCache, layer, tileIDs) {
     if (layer.paint.get('heatmap-opacity') === 0) {
         return;
     }
-    if (painter.renderPass === 'offscreen') {
-        const context = painter.context;
-        const gl = context.gl;
-        // Allow kernels to be drawn across boundaries, so that
-        // large kernels are not clipped to tiles
-        const stencilMode = StencilMode.disabled;
-        // Turn on additive blending for kernels, which is a key aspect of kernel density estimation formula
-        const colorMode = new ColorMode([gl.ONE, gl.ONE], performance$1.Color.transparent, [true, true, true, true]);
-        bindFramebuffer(context, painter, layer);
-        context.clear({ color: performance$1.Color.transparent });
-        for (let i = 0; i < coords.length; i++) {
-            const coord = coords[i];
+    const context = painter.context;
+    if (painter.style.map.terrain) {
+        for (const coord of tileIDs) {
+            const tile = sourceCache.getTile(coord);
             // Skip tiles that have uncovered parents to avoid flickering; we don't need
             // to use complex tile masking here because the change between zoom levels is subtle,
             // so it's fine to simply render the parent until all its 4 children are loaded
             if (sourceCache.hasRenderableParent(coord))
                 continue;
-            const tile = sourceCache.getTile(coord);
-            const bucket = tile.getBucket(layer);
-            if (!bucket)
-                continue;
-            const programConfiguration = bucket.programConfigurations.get(layer.id);
-            const program = painter.useProgram('heatmap', programConfiguration);
-            const { zoom } = painter.transform;
-            program.draw(context, gl.TRIANGLES, DepthMode.disabled, stencilMode, colorMode, CullFaceMode.disabled, heatmapUniformValues(coord.posMatrix, tile, zoom, layer.paint.get('heatmap-intensity')), null, layer.id, bucket.layoutVertexBuffer, bucket.indexBuffer, bucket.segments, layer.paint, painter.transform.zoom, programConfiguration);
+            if (painter.renderPass === 'offscreen') {
+                prepareHeatmapTerrain(painter, tile, layer, coord);
+            }
+            else if (painter.renderPass === 'translucent') {
+                renderHeatmapTerrain(painter, layer, coord);
+            }
         }
         context.viewport.set([0, 0, painter.width, painter.height]);
     }
-    else if (painter.renderPass === 'translucent') {
-        painter.context.setColorMode(painter.colorModeForRenderPass());
-        renderTextureToMap(painter, layer);
+    else {
+        if (painter.renderPass === 'offscreen') {
+            prepareHeatmapFlat(painter, sourceCache, layer, tileIDs);
+        }
+        else if (painter.renderPass === 'translucent') {
+            renderHeatmapFlat(painter, layer);
+        }
     }
+}
+function prepareHeatmapFlat(painter, sourceCache, layer, coords) {
+    const context = painter.context;
+    const gl = context.gl;
+    // Allow kernels to be drawn across boundaries, so that
+    // large kernels are not clipped to tiles
+    const stencilMode = StencilMode.disabled;
+    // Turn on additive blending for kernels, which is a key aspect of kernel density estimation formula
+    const colorMode = new ColorMode([gl.ONE, gl.ONE], performance$1.Color.transparent, [true, true, true, true]);
+    bindFramebuffer(context, painter, layer);
+    context.clear({ color: performance$1.Color.transparent });
+    for (let i = 0; i < coords.length; i++) {
+        const coord = coords[i];
+        // Skip tiles that have uncovered parents to avoid flickering; we don't need
+        // to use complex tile masking here because the change between zoom levels is subtle,
+        // so it's fine to simply render the parent until all its 4 children are loaded
+        if (sourceCache.hasRenderableParent(coord))
+            continue;
+        const tile = sourceCache.getTile(coord);
+        const bucket = tile.getBucket(layer);
+        if (!bucket)
+            continue;
+        const programConfiguration = bucket.programConfigurations.get(layer.id);
+        const program = painter.useProgram('heatmap', programConfiguration);
+        const { zoom } = painter.transform;
+        program.draw(context, gl.TRIANGLES, DepthMode.disabled, stencilMode, colorMode, CullFaceMode.disabled, heatmapUniformValues(coord.posMatrix, tile, zoom, layer.paint.get('heatmap-intensity')), null, layer.id, bucket.layoutVertexBuffer, bucket.indexBuffer, bucket.segments, layer.paint, painter.transform.zoom, programConfiguration);
+    }
+    context.viewport.set([0, 0, painter.width, painter.height]);
+}
+function renderHeatmapFlat(painter, layer) {
+    const context = painter.context;
+    const gl = context.gl;
+    context.setColorMode(painter.colorModeForRenderPass());
+    // Here we bind two different textures from which we'll sample in drawing
+    // heatmaps: the kernel texture, prepared in the offscreen pass, and a
+    // color ramp texture.
+    const fbo = layer.heatmapFbos.get(performance$1.HEATMAP_FULL_RENDER_FBO_KEY);
+    if (!fbo)
+        return;
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
+    context.activeTexture.set(gl.TEXTURE1);
+    const colorRampTexture = getColorRampTexture(context, layer);
+    colorRampTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+    painter.useProgram('heatmapTexture').draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, painter.colorModeForRenderPass(), CullFaceMode.disabled, heatmapTextureUniformValues(painter, layer, 0, 1), null, layer.id, painter.viewportBuffer, painter.quadTriangleIndexBuffer, painter.viewportSegments, layer.paint, painter.transform.zoom);
+}
+function prepareHeatmapTerrain(painter, tile, layer, coord) {
+    const context = painter.context;
+    const gl = context.gl;
+    const stencilMode = StencilMode.disabled;
+    // Turn on additive blending for kernels, which is a key aspect of kernel density estimation formula
+    const colorMode = new ColorMode([gl.ONE, gl.ONE], performance$1.Color.transparent, [true, true, true, true]);
+    const bucket = tile.getBucket(layer);
+    if (!bucket)
+        return;
+    const tileKey = coord.key;
+    let fbo = layer.heatmapFbos.get(tileKey);
+    if (!fbo) {
+        fbo = createHeatmapFbo(context, tile.tileSize, tile.tileSize);
+        layer.heatmapFbos.set(tileKey, fbo);
+    }
+    context.bindFramebuffer.set(fbo.framebuffer);
+    context.viewport.set([0, 0, tile.tileSize, tile.tileSize]);
+    context.clear({ color: performance$1.Color.transparent });
+    const programConfiguration = bucket.programConfigurations.get(layer.id);
+    const program = painter.useProgram('heatmap', programConfiguration);
+    const terrainData = painter.style.map.terrain.getTerrainData(coord);
+    program.draw(context, gl.TRIANGLES, DepthMode.disabled, stencilMode, colorMode, CullFaceMode.disabled, heatmapUniformValues(coord.posMatrix, tile, painter.transform.zoom, layer.paint.get('heatmap-intensity')), terrainData, layer.id, bucket.layoutVertexBuffer, bucket.indexBuffer, bucket.segments, layer.paint, painter.transform.zoom, programConfiguration);
+}
+function renderHeatmapTerrain(painter, layer, coord) {
+    const context = painter.context;
+    const gl = context.gl;
+    context.setColorMode(painter.colorModeForRenderPass());
+    const colorRampTexture = getColorRampTexture(context, layer);
+    // Here we bind two different textures from which we'll sample in drawing
+    // heatmaps: the kernel texture, prepared in the offscreen pass, and a
+    // color ramp texture.
+    const tileKey = coord.key;
+    const fbo = layer.heatmapFbos.get(tileKey);
+    if (!fbo)
+        return;
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
+    context.activeTexture.set(gl.TEXTURE1);
+    colorRampTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+    painter.useProgram('heatmapTexture').draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, painter.colorModeForRenderPass(), CullFaceMode.disabled, heatmapTextureUniformValues(painter, layer, 0, 1), null, layer.id, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments, layer.paint, painter.transform.zoom);
+    // destroy the FBO after rendering
+    fbo.destroy();
+    layer.heatmapFbos.delete(tileKey);
 }
 function bindFramebuffer(context, painter, layer) {
     const gl = context.gl;
     context.activeTexture.set(gl.TEXTURE1);
     // Use a 4x downscaled screen texture for better performance
     context.viewport.set([0, 0, painter.width / 4, painter.height / 4]);
-    let fbo = layer.heatmapFbo;
+    let fbo = layer.heatmapFbos.get(performance$1.HEATMAP_FULL_RENDER_FBO_KEY);
     if (!fbo) {
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        fbo = layer.heatmapFbo = context.createFramebuffer(painter.width / 4, painter.height / 4, false, false);
-        bindTextureToFramebuffer(context, painter, texture, fbo);
+        fbo = createHeatmapFbo(context, painter.width / 4, painter.height / 4);
+        layer.heatmapFbos.set(performance$1.HEATMAP_FULL_RENDER_FBO_KEY, fbo);
     }
     else {
         gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
         context.bindFramebuffer.set(fbo.framebuffer);
     }
 }
-function bindTextureToFramebuffer(context, painter, texture, fbo) {
+function createHeatmapFbo(context, width, height) {
     var _a, _b;
     const gl = context.gl;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     // Use the higher precision half-float texture where available (producing much smoother looking heatmaps);
     // Otherwise, fall back to a low precision texture
     const numType = (_a = context.HALF_FLOAT) !== null && _a !== void 0 ? _a : gl.UNSIGNED_BYTE;
     const internalFormat = (_b = context.RGBA16F) !== null && _b !== void 0 ? _b : gl.RGBA;
-    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, painter.width / 4, painter.height / 4, 0, gl.RGBA, numType, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, numType, null);
+    const fbo = context.createFramebuffer(width, height, false, false);
     fbo.colorAttachment.set(texture);
+    return fbo;
 }
-function renderTextureToMap(painter, layer) {
-    const context = painter.context;
-    const gl = context.gl;
-    // Here we bind two different textures from which we'll sample in drawing
-    // heatmaps: the kernel texture, prepared in the offscreen pass, and a
-    // color ramp texture.
-    const fbo = layer.heatmapFbo;
-    if (!fbo)
-        return;
-    context.activeTexture.set(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
-    context.activeTexture.set(gl.TEXTURE1);
-    let colorRampTexture = layer.colorRampTexture;
-    if (!colorRampTexture) {
-        colorRampTexture = layer.colorRampTexture = new Texture(context, layer.colorRamp, gl.RGBA);
+function getColorRampTexture(context, layer) {
+    if (!layer.colorRampTexture) {
+        layer.colorRampTexture = new Texture(context, layer.colorRamp, context.gl.RGBA);
     }
-    colorRampTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
-    painter.useProgram('heatmapTexture').draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, painter.colorModeForRenderPass(), CullFaceMode.disabled, heatmapTextureUniformValues(painter, layer, 0, 1), null, layer.id, painter.viewportBuffer, painter.quadTriangleIndexBuffer, painter.viewportSegments, layer.paint, painter.transform.zoom);
+    return layer.colorRampTexture;
 }
 
 function drawLine(painter, sourceCache, layer, coords) {
@@ -48480,6 +48838,11 @@ function drawRaster(painter, sourceCache, layer, tileIDs) {
         else {
             tile.texture.bind(textureFilter, gl.CLAMP_TO_EDGE, gl.LINEAR_MIPMAP_NEAREST);
         }
+        // Enable anisotropic filtering only when the pitch is greater than 20 degrees
+        // to preserve image sharpness on flat or slightly tilted maps.
+        if (tile.texture.useMipmap && context.extTextureFilterAnisotropic && painter.transform.pitch > 20) {
+            gl.texParameterf(gl.TEXTURE_2D, context.extTextureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT, context.extTextureFilterAnisotropicMax);
+        }
         const terrainData = painter.style.map.terrain && painter.style.map.terrain.getTerrainData(coord);
         const terrainCoord = terrainData ? coord : null;
         const posMatrix = terrainCoord ? terrainCoord.posMatrix : painter.transform.calculatePosMatrix(coord.toUnwrapped(), align);
@@ -48706,7 +49069,7 @@ function drawCustom(painter, sourceCache, layer) {
             new DepthMode(painter.context.gl.LEQUAL, DepthMode.ReadWrite, painter.depthRangeFor3D) :
             painter.depthModeForSublayer(0, DepthMode.ReadOnly);
         context.setDepthMode(depthMode);
-        implementation.render(context.gl, painter.transform.customLayerMatrix());
+        implementation.render(context.gl, painter.transform.customLayerMatrix(), { farZ: painter.transform.farZ, nearZ: painter.transform.nearZ, fov: painter.transform._fov, modelViewProjectionMatrix: painter.transform.modelViewProjectionMatrix, projectionMatrix: painter.transform.projectionMatrix });
         context.setDirty();
         painter.setBaseState();
         context.bindFramebuffer.set(null);
@@ -48784,9 +49147,49 @@ function drawTerrain(painter, terrain, tiles) {
         context.activeTexture.set(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture.texture);
         const posMatrix = painter.transform.calculatePosMatrix(tile.tileID.toUnwrapped());
-        const uniformValues = terrainUniformValues(posMatrix, terrain.getMeshFrameDelta(painter.transform.zoom));
+        const eleDelta = terrain.getMeshFrameDelta(painter.transform.zoom);
+        const fogMatrix = painter.transform.calculateFogMatrix(tile.tileID.toUnwrapped());
+        const uniformValues = terrainUniformValues(posMatrix, eleDelta, fogMatrix, painter.style.sky, painter.transform.pitch);
         program.draw(context, gl.TRIANGLES, depthMode, StencilMode.disabled, colorMode, CullFaceMode.backCCW, uniformValues, terrainData, 'terrain', mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
     }
+}
+
+class Mesh {
+    constructor(vertexBuffer, indexBuffer, segments) {
+        this.vertexBuffer = vertexBuffer;
+        this.indexBuffer = indexBuffer;
+        this.segments = segments;
+    }
+    destroy() {
+        this.vertexBuffer.destroy();
+        this.indexBuffer.destroy();
+        this.segments.destroy();
+        this.vertexBuffer = null;
+        this.indexBuffer = null;
+        this.segments = null;
+    }
+}
+
+function drawSky(painter, sky) {
+    const context = painter.context;
+    const gl = context.gl;
+    const skyUniforms = skyUniformValues(sky, painter.style.map.transform, painter.pixelRatio);
+    const depthMode = new DepthMode(gl.LEQUAL, DepthMode.ReadWrite, [0, 1]);
+    const stencilMode = StencilMode.disabled;
+    const colorMode = painter.colorModeForRenderPass();
+    const program = painter.useProgram('sky');
+    if (!sky.mesh) {
+        const vertexArray = new performance$1.PosArray();
+        vertexArray.emplaceBack(-1, -1);
+        vertexArray.emplaceBack(1, -1);
+        vertexArray.emplaceBack(1, 1);
+        vertexArray.emplaceBack(-1, 1);
+        const indexArray = new performance$1.TriangleIndexArray();
+        indexArray.emplaceBack(0, 1, 2);
+        indexArray.emplaceBack(0, 2, 3);
+        sky.mesh = new Mesh(context.createVertexBuffer(vertexArray, posAttributes.members), context.createIndexBuffer(indexArray), performance$1.SegmentVector.simpleSegment(0, 0, vertexArray.length, indexArray.length));
+    }
+    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, skyUniforms, undefined, 'sky', sky.mesh.vertexBuffer, sky.mesh.indexBuffer, sky.mesh.segments);
 }
 
 /**
@@ -49032,6 +49435,9 @@ class Painter {
         // Clear buffers in preparation for drawing to the main framebuffer
         this.context.clear({ color: options.showOverdrawInspector ? performance$1.Color.black : performance$1.Color.transparent, depth: 1 });
         this.clearStencil();
+        // draw sky first to not overwrite symbols
+        if (this.style.sky)
+            drawSky(this, this.style.sky);
         this._showOverdrawInspector = options.showOverdrawInspector;
         this.depthRangeFor3D = [0, 1 - ((style._order.length + 2) * this.numSublayers * this.depthEpsilon)];
         // Opaque pass ===============================================
@@ -49472,6 +49878,7 @@ class Transform {
         this._edgeInsets = new EdgeInsets();
         this._posMatrixCache = {};
         this._alignedPosMatrixCache = {};
+        this._fogMatrixCache = {};
         this.minElevationForCurrentTile = 0;
     }
     clone() {
@@ -49482,6 +49889,7 @@ class Transform {
     apply(that) {
         this.tileSize = that.tileSize;
         this.latRange = that.latRange;
+        this.lngRange = that.lngRange;
         this.width = that.width;
         this.height = that.height;
         this._center = that._center;
@@ -49990,6 +50398,15 @@ class Transform {
             this.latRange = [-MAX_VALID_LATITUDE, MAX_VALID_LATITUDE];
         }
     }
+    calculateTileMatrix(unwrappedTileID) {
+        const canonical = unwrappedTileID.canonical;
+        const scale = this.worldSize / this.zoomScale(canonical.z);
+        const unwrappedX = canonical.x + Math.pow(2, canonical.z) * unwrappedTileID.wrap;
+        const worldMatrix = performance$1.identity(new Float64Array(16));
+        performance$1.translate(worldMatrix, worldMatrix, [unwrappedX * scale, canonical.y * scale, 0]);
+        performance$1.scale(worldMatrix, worldMatrix, [scale / performance$1.EXTENT, scale / performance$1.EXTENT, 1]);
+        return worldMatrix;
+    }
     /**
      * Calculate the posMatrix that, given a tile coordinate, would be used to display the tile on a map.
      * @param unwrappedTileID - the tile ID
@@ -50000,14 +50417,25 @@ class Transform {
         if (cache[posMatrixKey]) {
             return cache[posMatrixKey];
         }
-        const canonical = unwrappedTileID.canonical;
-        const scale = this.worldSize / this.zoomScale(canonical.z);
-        const unwrappedX = canonical.x + Math.pow(2, canonical.z) * unwrappedTileID.wrap;
-        const posMatrix = performance$1.identity(new Float64Array(16));
-        performance$1.translate(posMatrix, posMatrix, [unwrappedX * scale, canonical.y * scale, 0]);
-        performance$1.scale(posMatrix, posMatrix, [scale / performance$1.EXTENT, scale / performance$1.EXTENT, 1]);
+        const posMatrix = this.calculateTileMatrix(unwrappedTileID);
         performance$1.multiply(posMatrix, aligned ? this.alignedModelViewProjectionMatrix : this.modelViewProjectionMatrix, posMatrix);
         cache[posMatrixKey] = new Float32Array(posMatrix);
+        return cache[posMatrixKey];
+    }
+    /**
+     * Calculate the fogMatrix that, given a tile coordinate, would be used to calculate fog on the map.
+     * @param unwrappedTileID - the tile ID
+     * @private
+     */
+    calculateFogMatrix(unwrappedTileID) {
+        const posMatrixKey = unwrappedTileID.key;
+        const cache = this._fogMatrixCache;
+        if (cache[posMatrixKey]) {
+            return cache[posMatrixKey];
+        }
+        const fogMatrix = this.calculateTileMatrix(unwrappedTileID);
+        performance$1.multiply(fogMatrix, this.fogMatrix, fogMatrix);
+        cache[posMatrixKey] = new Float32Array(fogMatrix);
         return cache[posMatrixKey];
     }
     customLayerMatrix() {
@@ -50140,7 +50568,7 @@ class Transform {
         // Calculate z distance of the farthest fragment that should be rendered.
         // Add a bit extra to avoid precision problems when a fragment's distance is exactly `furthestDistance`
         const topHalfMinDistance = Math.min(topHalfSurfaceDistance, topHalfSurfaceDistanceHorizon);
-        const farZ = (Math.cos(Math.PI / 2 - this._pitch) * topHalfMinDistance + lowestPlane) * 1.01;
+        this.farZ = (Math.cos(Math.PI / 2 - this._pitch) * topHalfMinDistance + lowestPlane) * 1.01;
         // The larger the value of nearZ is
         // - the more depth precision is available for features (good)
         // - clipping starts appearing sooner when the camera is close to 3d features (bad)
@@ -50148,13 +50576,14 @@ class Transform {
         // Other values work for mapbox-gl-js but deck.gl was encountering precision issues
         // when rendering custom layers. This value was experimentally chosen and
         // seems to solve z-fighting issues in deck.gl while not clipping buildings too close to the camera.
-        const nearZ = this.height / 50;
+        this.nearZ = this.height / 50;
         // matrix for conversion from location to clip space(-1 .. 1)
         m = new Float64Array(16);
-        performance$1.perspective(m, this._fov, this.width / this.height, nearZ, farZ);
+        performance$1.perspective(m, this._fov, this.width / this.height, this.nearZ, this.farZ);
         // Apply center of perspective offset
         m[8] = -offset.x * 2 / this.width;
         m[9] = offset.y * 2 / this.height;
+        this.projectionMatrix = performance$1.clone(m);
         performance$1.scale(m, m, [1, -1, 1]);
         performance$1.translate(m, m, [0, 0, -this.cameraToCenterDistance]);
         performance$1.rotateX(m, m, this._pitch);
@@ -50171,6 +50600,19 @@ class Transform {
         performance$1.translate(m, m, [0, 0, -this.elevation]); // elevate camera over terrain
         this.modelViewProjectionMatrix = m;
         this.invModelViewProjectionMatrix = performance$1.invert([], m);
+        // create a fog matrix, same es proj-matrix but with near clipping-plane in mapcenter
+        // needed to calculate a correct z-value for fog calculation, because projMatrix z value is not
+        this.fogMatrix = new Float64Array(16);
+        performance$1.perspective(this.fogMatrix, this._fov, this.width / this.height, cameraToSeaLevelDistance, this.farZ);
+        this.fogMatrix[8] = -offset.x * 2 / this.width;
+        this.fogMatrix[9] = offset.y * 2 / this.height;
+        performance$1.scale(this.fogMatrix, this.fogMatrix, [1, -1, 1]);
+        performance$1.translate(this.fogMatrix, this.fogMatrix, [0, 0, -this.cameraToCenterDistance]);
+        performance$1.rotateX(this.fogMatrix, this.fogMatrix, this._pitch);
+        performance$1.rotateZ(this.fogMatrix, this.fogMatrix, this.angle);
+        performance$1.translate(this.fogMatrix, this.fogMatrix, [-x, -y, 0]);
+        performance$1.scale(this.fogMatrix, this.fogMatrix, [1, 1, this._pixelPerMeter]);
+        performance$1.translate(this.fogMatrix, this.fogMatrix, [0, 0, -this.elevation]); // elevate camera over terrain
         // matrix for conversion from world space to screen coordinates in 3D
         this.pixelMatrix3D = performance$1.multiply(new Float64Array(16), this.labelPlaneMatrix, m);
         // Make a second projection matrix that is aligned to a pixel grid for rendering raster tiles.
@@ -50190,6 +50632,7 @@ class Transform {
         this.pixelMatrixInverse = m;
         this._posMatrixCache = {};
         this._alignedPosMatrixCache = {};
+        this._fogMatrixCache = {};
     }
     maxPitchScaleFactor() {
         // calcMatrices hasn't run yet
@@ -50334,14 +50777,31 @@ class Hash {
         this._updateHashUnthrottled = () => {
             // Replace if already present, else append the updated hash string
             const location = window.location.href.replace(/(#.+)?$/, this.getHashString());
-            try {
-                window.history.replaceState(window.history.state, null, location);
+            window.history.replaceState(window.history.state, null, location);
+        };
+        this._removeHash = () => {
+            const currentHash = this._getCurrentHash();
+            if (currentHash.length === 0) {
+                return;
             }
-            catch (SecurityError) {
-                // IE11 does not allow this if the page is within an iframe created
-                // with iframe.contentWindow.document.write(...).
-                // https://github.com/mapbox/mapbox-gl-js/issues/7410
+            const baseHash = currentHash.join('/');
+            let targetHash = baseHash;
+            if (targetHash.split('&').length > 0) {
+                targetHash = targetHash.split('&')[0]; // #3/1/2&foo=bar -> #3/1/2
             }
+            if (this._hashName) {
+                targetHash = `${this._hashName}=${baseHash}`;
+            }
+            let replaceString = window.location.hash.replace(targetHash, '');
+            if (replaceString.startsWith('#&')) {
+                replaceString = replaceString.slice(0, 1) + replaceString.slice(2);
+            }
+            else if (replaceString === '#') {
+                replaceString = '';
+            }
+            let location = window.location.href.replace(/(#.+)?$/, replaceString);
+            location = location.replace('&&', '&');
+            window.history.replaceState(window.history.state, null, location);
         };
         /**
          * Mobile Safari doesn't allow updating the hash more than 100 times per 30 seconds.
@@ -50367,6 +50827,7 @@ class Hash {
         removeEventListener('hashchange', this._onHashChange, false);
         this._map.off('moveend', this._updateHash);
         clearTimeout(this._updateHash());
+        this._removeHash();
         delete this._map;
         return this;
     }
@@ -50756,8 +51217,9 @@ class BlockableMapEventHandler {
 /**
  * @internal
  * Shared utilities for the Handler classes to access the correct camera state.
- * If Camera.transformCameraUpdate is specified, the "desired state" of camera may differ from the state used for rendering.
- * The handlers need the "desired state" to track accumulated changes.
+ * If Camera.transformCameraUpdate is specified or terrain is enabled, the
+ * "desired state" of camera may differ from the state used for rendering. The
+ * handlers need the "desired state" to track accumulated changes.
  */
 class TransformProvider {
     constructor(map) {
@@ -51309,21 +51771,26 @@ class TouchPanHandler {
         this._touches = {};
         this._sum = new performance$1.Point(0, 0);
     }
-    minTouchs() {
-        return this._map.cooperativeGestures.isEnabled() ? 2 : 1;
+    _shouldBePrevented(touchesCount) {
+        const minTouches = this._map.cooperativeGestures.isEnabled() ? 2 : 1;
+        return touchesCount < minTouches;
     }
     touchstart(e, points, mapTouches) {
         return this._calculateTransform(e, points, mapTouches);
     }
     touchmove(e, points, mapTouches) {
-        if (!this._active || mapTouches.length < this.minTouchs())
+        if (!this._active)
             return;
+        if (this._shouldBePrevented(mapTouches.length)) {
+            this._map.cooperativeGestures.notifyGestureBlocked('touch_pan', e);
+            return;
+        }
         e.preventDefault();
         return this._calculateTransform(e, points, mapTouches);
     }
     touchend(e, points, mapTouches) {
         this._calculateTransform(e, points, mapTouches);
-        if (this._active && mapTouches.length < this.minTouchs()) {
+        if (this._active && this._shouldBePrevented(mapTouches.length)) {
             this.reset();
         }
     }
@@ -51348,7 +51815,7 @@ class TouchPanHandler {
             }
         }
         this._touches = touches;
-        if (touchDeltaCount < this.minTouchs() || !touchDeltaSum.mag())
+        if (this._shouldBePrevented(touchDeltaCount) || !touchDeltaSum.mag())
             return;
         const panDelta = touchDeltaSum.div(touchDeltaCount);
         this._sum._add(panDelta);
@@ -51921,10 +52388,22 @@ class ScrollZoomHandler {
             return;
         this._enabled = false;
     }
+    /**
+     * Determines whether or not the gesture is blocked due to cooperativeGestures.
+     */
+    _shouldBePrevented(e) {
+        if (!this._map.cooperativeGestures.isEnabled()) {
+            return false;
+        }
+        const isTrackpadPinch = e.ctrlKey;
+        const isBypassed = isTrackpadPinch || this._map.cooperativeGestures.isBypassed(e);
+        return !isBypassed;
+    }
     wheel(e) {
         if (!this.isEnabled())
             return;
-        if (this._map.cooperativeGestures.isEnabled() && !e[this._map.cooperativeGestures._bypassKey]) {
+        if (this._shouldBePrevented(e)) {
+            this._map.cooperativeGestures.notifyGestureBlocked('wheel_zoom', e);
             return;
         }
         let value = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 40 : e.deltaY;
@@ -52034,8 +52513,9 @@ class ScrollZoomHandler {
         const easing = this._easing;
         let finished = false;
         let zoom;
-        if (this._type === 'wheel' && startZoom && easing) {
-            const t = Math.min((browser.now() - this._lastWheelEventTime) / 200, 1);
+        const lastWheelEventTimeDiff = browser.now() - this._lastWheelEventTime;
+        if (this._type === 'wheel' && startZoom && easing && lastWheelEventTimeDiff) {
+            const t = Math.min(lastWheelEventTimeDiff / 200, 1);
             const k = easing(t);
             zoom = performance$1.interpolate.number(startZoom, targetZoom, k);
             if (t < 1) {
@@ -52502,6 +52982,8 @@ class TwoFingersTouchZoomRotateHandler {
 /**
  * A `CooperativeGestureHandler` is a control that adds cooperative gesture info when user tries to zoom in/out.
  *
+ * When the CooperativeGestureHandler blocks a gesture, it will emit a `cooperativegestureprevented` event.
+ *
  * @group Handlers
  *
  * @example
@@ -52510,7 +52992,7 @@ class TwoFingersTouchZoomRotateHandler {
  *   cooperativeGestures: true
  * });
  * ```
- * @see [Example: cooperative gestures](https://maplibre.org/maplibre-gl-js-docs/example/cooperative-gestures/)
+ * @see [Example: cooperative gestures](https://maplibre.org/maplibre-gl-js/docs/examples/cooperative-gestures/)
  **/
 class CooperativeGesturesHandler {
     constructor(map, options) {
@@ -52551,7 +53033,7 @@ class CooperativeGesturesHandler {
         // Remove cooperative gesture screen from the accessibility tree since screenreaders cannot interact with the map using gestures
         this._container.setAttribute('aria-hidden', 'true');
     }
-    _destoryUI() {
+    _destroyUI() {
         if (this._container) {
             DOM.remove(this._container);
             const mapCanvasContainer = this._map.getCanvasContainer();
@@ -52565,23 +53047,19 @@ class CooperativeGesturesHandler {
     }
     disable() {
         this._enabled = false;
-        this._destoryUI();
+        this._destroyUI();
     }
     isEnabled() {
         return this._enabled;
     }
-    touchmove(e) {
-        this._onCooperativeGesture(e.touches.length === 1);
+    isBypassed(event) {
+        return event[this._bypassKey];
     }
-    wheel(e) {
-        if (!this._map.scrollZoom.isEnabled()) {
+    notifyGestureBlocked(gestureType, originalEvent) {
+        if (!this._enabled)
             return;
-        }
-        this._onCooperativeGesture(!e[this._bypassKey]);
-    }
-    _onCooperativeGesture(showNotification) {
-        if (!this._enabled || !showNotification)
-            return;
+        // notify subscribers that a cooperative gesture was prevented
+        this._map.fire(new performance$1.Event('cooperativegestureprevented', { gestureType, originalEvent }));
         // Alert user how to scroll/pan
         this._container.classList.add('maplibregl-show');
         setTimeout(() => {
@@ -52970,7 +53448,9 @@ class HandlerManager {
         if (finishedMoving && this._terrainMovement) {
             this._map._elevationFreeze = false;
             this._terrainMovement = false;
-            this._map.transform.recalculateZoom(this._map.terrain);
+            const tr = this._map._getTransformForUpdate();
+            tr.recalculateZoom(this._map.terrain);
+            this._map._applyUpdatedTransform(tr);
         }
         if (allowEndAnimation && finishedMoving) {
             this._updatingCamera = true;
@@ -53314,6 +53794,7 @@ class Camera extends performance$1.Evented {
      * @param bounds - Calculate the center for these bounds in the viewport and use
      * the highest zoom level up to and including `Map#getMaxZoom()` that fits
      * in the viewport. LngLatBounds represent a box that is always axis-aligned with bearing 0.
+     * Bounds will be taken in [sw, ne] order. Southwest point will always be to the left of the northeast point.
      * @param options - Options object
      * @returns If map is able to fit to provided bounds, returns `center`, `zoom`, and `bearing`.
      * If map is unable to fit, method will warn and return undefined.
@@ -53326,7 +53807,7 @@ class Camera extends performance$1.Evented {
      * ```
      */
     cameraForBounds(bounds, options) {
-        bounds = LngLatBounds.convert(bounds);
+        bounds = LngLatBounds.convert(bounds).adjustAntiMeridian();
         const bearing = options && options.bearing || 0;
         return this._cameraForBoxAndBearing(bounds.getNorthWest(), bounds.getSouthEast(), bearing, options);
     }
@@ -53423,6 +53904,7 @@ class Camera extends performance$1.Evented {
      *
      * @param bounds - Center these bounds in the viewport and use the highest
      * zoom level up to and including `Map#getMaxZoom()` that fits them in the viewport.
+     * Bounds will be taken in [sw, ne] order. Southwest point will always be to the left of the northeast point.
      * @param options - Options supports all properties from {@link AnimationOptions} and {@link CameraOptions} in addition to the fields below.
      * @param eventData - Additional properties to be added to event objects of events triggered by this method.
      * @example
@@ -53597,12 +54079,12 @@ class Camera extends performance$1.Evented {
         }, options);
         if (options.animate === false || (!options.essential && browser.prefersReducedMotion))
             options.duration = 0;
-        const tr = this._getTransformForUpdate(), startZoom = this.getZoom(), startBearing = this.getBearing(), startPitch = this.getPitch(), startPadding = this.getPadding(), bearing = 'bearing' in options ? this._normalizeBearing(options.bearing, startBearing) : startBearing, pitch = 'pitch' in options ? +options.pitch : startPitch, padding = 'padding' in options ? options.padding : tr.padding;
+        const tr = this._getTransformForUpdate(), startZoom = tr.zoom, startBearing = tr.bearing, startPitch = tr.pitch, startPadding = tr.padding, bearing = 'bearing' in options ? this._normalizeBearing(options.bearing, startBearing) : startBearing, pitch = 'pitch' in options ? +options.pitch : startPitch, padding = 'padding' in options ? options.padding : tr.padding;
         const offsetAsPoint = performance$1.Point.convert(options.offset);
         let pointAtOffset = tr.centerPoint.add(offsetAsPoint);
         const locationAtOffset = tr.pointLocation(pointAtOffset);
         const { center, zoom } = tr.getConstrained(performance$1.LngLat.convert(options.center || locationAtOffset), (_a = options.zoom) !== null && _a !== void 0 ? _a : startZoom);
-        this._normalizeCenter(center);
+        this._normalizeCenter(center, tr);
         const from = tr.project(locationAtOffset);
         const delta = tr.project(center).sub(from);
         const finalScale = tr.zoomScale(zoom - startZoom);
@@ -53704,13 +54186,14 @@ class Camera extends performance$1.Evented {
     /**
      * @internal
      * Called when the camera is about to be manipulated.
-     * If `transformCameraUpdate` is specified, a copy of the current transform is created to track the accumulated changes.
+     * If `transformCameraUpdate` is specified or terrain is enabled, a copy of
+     * the current transform is created to track the accumulated changes.
      * This underlying transform represents the "desired state" proposed by input handlers / animations / UI controls.
      * It may differ from the state used for rendering (`this.transform`).
      * @returns Transform to apply changes to
      */
     _getTransformForUpdate() {
-        if (!this.transformCameraUpdate)
+        if (!this.transformCameraUpdate && !this.terrain)
             return this.transform;
         if (!this._requestedCameraState) {
             this._requestedCameraState = this.transform.clone();
@@ -53719,26 +54202,62 @@ class Camera extends performance$1.Evented {
     }
     /**
      * @internal
+     * Checks the given transform for the camera being below terrain surface and
+     * returns new pitch and zoom to fix that.
+     *
+     * With the new pitch and zoom, the camera will be at the same ground
+     * position but at higher altitude. It will still point to the same spot on
+     * the map.
+     *
+     * @param tr - The transform to check.
+     */
+    _elevateCameraIfInsideTerrain(tr) {
+        const camera = tr.getCameraPosition();
+        const minAltitude = this.terrain.getElevationForLngLatZoom(camera.lngLat, tr.zoom);
+        if (camera.altitude < minAltitude) {
+            const newCamera = this.calculateCameraOptionsFromTo(camera.lngLat, minAltitude, tr.center, tr.elevation);
+            return {
+                pitch: newCamera.pitch,
+                zoom: newCamera.zoom,
+            };
+        }
+        return {};
+    }
+    /**
+     * @internal
      * Called after the camera is done being manipulated.
      * @param tr - the requested camera end state
+     * If the camera is inside terrain, it gets elevated.
      * Call `transformCameraUpdate` if present, and then apply the "approved" changes.
      */
     _applyUpdatedTransform(tr) {
-        if (!this.transformCameraUpdate)
+        const modifiers = [];
+        if (this.terrain) {
+            modifiers.push(tr => this._elevateCameraIfInsideTerrain(tr));
+        }
+        if (this.transformCameraUpdate) {
+            modifiers.push(tr => this.transformCameraUpdate(tr));
+        }
+        if (!modifiers.length) {
             return;
-        const nextTransform = tr.clone();
-        const { center, zoom, pitch, bearing, elevation } = this.transformCameraUpdate(nextTransform);
-        if (center)
-            nextTransform.center = center;
-        if (zoom !== undefined)
-            nextTransform.zoom = zoom;
-        if (pitch !== undefined)
-            nextTransform.pitch = pitch;
-        if (bearing !== undefined)
-            nextTransform.bearing = bearing;
-        if (elevation !== undefined)
-            nextTransform.elevation = elevation;
-        this.transform.apply(nextTransform);
+        }
+        const finalTransform = tr.clone();
+        for (const modifier of modifiers) {
+            const nextTransform = finalTransform.clone();
+            const { center, zoom, pitch, bearing, elevation } = modifier(nextTransform);
+            if (center)
+                nextTransform.center = center;
+            if (zoom !== undefined)
+                nextTransform.zoom = zoom;
+            if (pitch !== undefined)
+                nextTransform.pitch = pitch;
+            if (bearing !== undefined)
+                nextTransform.bearing = bearing;
+            if (elevation !== undefined)
+                nextTransform.elevation = elevation;
+            finalTransform.apply(nextTransform);
+        }
+        this.transform.apply(finalTransform);
     }
     _fireMoveEvents(eventData) {
         this.fire(new performance$1.Event('move', eventData));
@@ -53834,7 +54353,7 @@ class Camera extends performance$1.Evented {
             curve: 1.42,
             easing: performance$1.defaultEasing
         }, options);
-        const tr = this._getTransformForUpdate(), startZoom = this.getZoom(), startBearing = this.getBearing(), startPitch = this.getPitch(), startPadding = this.getPadding();
+        const tr = this._getTransformForUpdate(), startZoom = tr.zoom, startBearing = tr.bearing, startPitch = tr.pitch, startPadding = tr.padding;
         const bearing = 'bearing' in options ? this._normalizeBearing(options.bearing, startBearing) : startBearing;
         const pitch = 'pitch' in options ? +options.pitch : startPitch;
         const padding = 'padding' in options ? options.padding : tr.padding;
@@ -53842,7 +54361,7 @@ class Camera extends performance$1.Evented {
         let pointAtOffset = tr.centerPoint.add(offsetAsPoint);
         const locationAtOffset = tr.pointLocation(pointAtOffset);
         const { center, zoom } = tr.getConstrained(performance$1.LngLat.convert(options.center || locationAtOffset), (_a = options.zoom) !== null && _a !== void 0 ? _a : startZoom);
-        this._normalizeCenter(center);
+        this._normalizeCenter(center, tr);
         const scale = tr.zoomScale(zoom - startZoom);
         const from = tr.project(locationAtOffset);
         const delta = tr.project(center).sub(from);
@@ -54000,8 +54519,7 @@ class Camera extends performance$1.Evented {
     }
     // If a path crossing the antimeridian would be shorter, extend the final coordinate so that
     // interpolating between the two endpoints will cross it.
-    _normalizeCenter(center) {
-        const tr = this.transform;
+    _normalizeCenter(center, tr) {
         if (!tr.renderWorldCopies || tr.lngRange)
             return;
         const delta = center.lng - tr.center.lng;
@@ -54540,6 +55058,8 @@ class Terrain {
      * @returns the elevation
      */
     getElevationForLngLatZoom(lnglat, zoom) {
+        if (!performance$1.isInBoundsForZoomLngLat(zoom, lnglat.wrap()))
+            return 0;
         const { tileID, mercatorX, mercatorY } = this._getOverscaledTileIDFromLngLatZoom(lnglat, zoom);
         return this.getElevation(tileID, mercatorX % performance$1.EXTENT, mercatorY % performance$1.EXTENT, performance$1.EXTENT);
     }
@@ -54761,11 +55281,7 @@ class Terrain {
             indexArray.emplaceBack(offsetRight + y, offsetRight + y + 3, offsetRight + y + 1);
             indexArray.emplaceBack(offsetRight + y, offsetRight + y + 2, offsetRight + y + 3);
         }
-        this._mesh = {
-            indexBuffer: context.createIndexBuffer(indexArray),
-            vertexBuffer: context.createVertexBuffer(vertexArray, pos3dAttributes.members),
-            segments: performance$1.SegmentVector.simpleSegment(0, 0, vertexArray.length, indexArray.length)
-        };
+        this._mesh = new Mesh(context.createVertexBuffer(vertexArray, pos3dAttributes.members), context.createIndexBuffer(indexArray), performance$1.SegmentVector.simpleSegment(0, 0, vertexArray.length, indexArray.length));
         return this._mesh;
     }
     /**
@@ -55228,7 +55744,8 @@ let Map$1 = class Map extends Camera {
             let initialResizeEventCaptured = false;
             const throttledResizeCallback = throttle((entries) => {
                 if (this._trackResize && !this._removed) {
-                    this.resize(entries)._update();
+                    this.resize(entries);
+                    this.redraw();
                 }
             }, 50);
             this._resizeObserver = new ResizeObserver((entries) => {
@@ -55754,11 +56271,12 @@ let Map$1 = class Map extends Camera {
         var _a;
         return this._rotating || ((_a = this.handlers) === null || _a === void 0 ? void 0 : _a.isRotating());
     }
-    _createDelegatedListener(type, layerId, listener) {
+    _createDelegatedListener(type, layerIds, listener) {
         if (type === 'mouseenter' || type === 'mouseover') {
             let mousein = false;
             const mousemove = (e) => {
-                const features = this.getLayer(layerId) ? this.queryRenderedFeatures(e.point, { layers: [layerId] }) : [];
+                const existingLayers = layerIds.filter((layerId) => this.getLayer(layerId));
+                const features = existingLayers.length !== 0 ? this.queryRenderedFeatures(e.point, { layers: existingLayers }) : [];
                 if (!features.length) {
                     mousein = false;
                 }
@@ -55770,12 +56288,13 @@ let Map$1 = class Map extends Camera {
             const mouseout = () => {
                 mousein = false;
             };
-            return { layer: layerId, listener, delegates: { mousemove, mouseout } };
+            return { layers: layerIds, listener, delegates: { mousemove, mouseout } };
         }
         else if (type === 'mouseleave' || type === 'mouseout') {
             let mousein = false;
             const mousemove = (e) => {
-                const features = this.getLayer(layerId) ? this.queryRenderedFeatures(e.point, { layers: [layerId] }) : [];
+                const existingLayers = layerIds.filter((layerId) => this.getLayer(layerId));
+                const features = existingLayers.length !== 0 ? this.queryRenderedFeatures(e.point, { layers: existingLayers }) : [];
                 if (features.length) {
                     mousein = true;
                 }
@@ -55790,11 +56309,12 @@ let Map$1 = class Map extends Camera {
                     listener.call(this, new MapMouseEvent(type, this, e.originalEvent));
                 }
             };
-            return { layer: layerId, listener, delegates: { mousemove, mouseout } };
+            return { layers: layerIds, listener, delegates: { mousemove, mouseout } };
         }
         else {
             const delegate = (e) => {
-                const features = this.getLayer(layerId) ? this.queryRenderedFeatures(e.point, { layers: [layerId] }) : [];
+                const existingLayers = layerIds.filter((layerId) => this.getLayer(layerId));
+                const features = existingLayers.length !== 0 ? this.queryRenderedFeatures(e.point, { layers: existingLayers }) : [];
                 if (features.length) {
                     // Here we need to mutate the original event, so that preventDefault works as expected.
                     e.features = features;
@@ -55802,52 +56322,69 @@ let Map$1 = class Map extends Camera {
                     delete e.features;
                 }
             };
-            return { layer: layerId, listener, delegates: { [type]: delegate } };
+            return { layers: layerIds, listener, delegates: { [type]: delegate } };
         }
     }
-    on(type, layerIdOrListener, listener) {
-        if (listener === undefined) {
-            return super.on(type, layerIdOrListener);
-        }
-        const delegatedListener = this._createDelegatedListener(type, layerIdOrListener, listener);
+    _saveDelegatedListener(type, delegatedListener) {
         this._delegatedListeners = this._delegatedListeners || {};
         this._delegatedListeners[type] = this._delegatedListeners[type] || [];
         this._delegatedListeners[type].push(delegatedListener);
+    }
+    _removeDelegatedListener(type, layerIds, listener) {
+        if (!this._delegatedListeners || !this._delegatedListeners[type]) {
+            return;
+        }
+        const listeners = this._delegatedListeners[type];
+        for (let i = 0; i < listeners.length; i++) {
+            const delegatedListener = listeners[i];
+            if (delegatedListener.listener === listener &&
+                delegatedListener.layers.length === layerIds.length &&
+                delegatedListener.layers.every((layerId) => layerIds.includes(layerId))) {
+                for (const event in delegatedListener.delegates) {
+                    this.off(event, delegatedListener.delegates[event]);
+                }
+                listeners.splice(i, 1);
+                return;
+            }
+        }
+    }
+    on(type, layerIdsOrListener, listener) {
+        if (listener === undefined) {
+            return super.on(type, layerIdsOrListener);
+        }
+        const layerIds = typeof layerIdsOrListener === 'string' ? [layerIdsOrListener] : layerIdsOrListener;
+        const delegatedListener = this._createDelegatedListener(type, layerIds, listener);
+        this._saveDelegatedListener(type, delegatedListener);
         for (const event in delegatedListener.delegates) {
             this.on(event, delegatedListener.delegates[event]);
         }
         return this;
     }
-    once(type, layerIdOrListener, listener) {
+    once(type, layerIdsOrListener, listener) {
         if (listener === undefined) {
-            return super.once(type, layerIdOrListener);
+            return super.once(type, layerIdsOrListener);
         }
-        const delegatedListener = this._createDelegatedListener(type, layerIdOrListener, listener);
+        const layerIds = typeof layerIdsOrListener === 'string' ? [layerIdsOrListener] : layerIdsOrListener;
+        const delegatedListener = this._createDelegatedListener(type, layerIds, listener);
+        for (const key in delegatedListener.delegates) {
+            const delegate = delegatedListener.delegates[key];
+            delegatedListener.delegates[key] = (...args) => {
+                this._removeDelegatedListener(type, layerIds, listener);
+                delegate(...args);
+            };
+        }
+        this._saveDelegatedListener(type, delegatedListener);
         for (const event in delegatedListener.delegates) {
             this.once(event, delegatedListener.delegates[event]);
         }
         return this;
     }
-    off(type, layerIdOrListener, listener) {
+    off(type, layerIdsOrListener, listener) {
         if (listener === undefined) {
-            return super.off(type, layerIdOrListener);
+            return super.off(type, layerIdsOrListener);
         }
-        const removeDelegatedListener = (delegatedListeners) => {
-            const listeners = delegatedListeners[type];
-            for (let i = 0; i < listeners.length; i++) {
-                const delegatedListener = listeners[i];
-                if (delegatedListener.layer === layerIdOrListener && delegatedListener.listener === listener) {
-                    for (const event in delegatedListener.delegates) {
-                        this.off(event, delegatedListener.delegates[event]);
-                    }
-                    listeners.splice(i, 1);
-                    return this;
-                }
-            }
-        };
-        if (this._delegatedListeners && this._delegatedListeners[type]) {
-            removeDelegatedListener(this._delegatedListeners);
-        }
+        const layerIds = typeof layerIdsOrListener === 'string' ? [layerIdsOrListener] : layerIdsOrListener;
+        this._removeDelegatedListener(type, layerIds, listener);
         return this;
     }
     /**
@@ -56936,6 +57473,33 @@ let Map$1 = class Map extends Camera {
         return this.style.getLight();
     }
     /**
+     * Loads sky and fog defined by {@link SkySpecification} onto the map.
+     * Note: The fog only shows when using the terrain 3D feature.
+     * @param sky - Sky properties to set. Must conform to the [MapLibre Style Specification](https://maplibre.org/maplibre-style-spec/sky/).
+     * @returns `this`
+     * @example
+     * ```ts
+     * map.setSky({ 'sky-color': '#00f' });
+     * ```
+     */
+    setSky(sky) {
+        this._lazyInitEmptyStyle();
+        this.style.setSky(sky);
+        return this._update(true);
+    }
+    /**
+     * Returns the value of the sky object.
+     *
+     * @returns the sky properties of the style.
+     * @example
+     * ```ts
+     * map.getSky();
+     * ```
+     */
+    getSky() {
+        return this.style.getSky();
+    }
+    /**
      * Sets the `state` of a feature.
      * A feature's `state` is a set of user-defined key-value pairs that are assigned to a feature at runtime.
      * When using this method, the `state` object is merged with any existing key-value pairs in the feature's state.
@@ -57930,7 +58494,7 @@ class Marker extends performance$1.Evented {
             // because rounding the coordinates at every `move` event causes stuttered zooming
             // we only round them when _update is called with `moveend` or when its called with
             // no arguments (when the Marker is initialized or Marker#setLngLat is invoked).
-            if (!e || e.type === 'moveend') {
+            if (!this._subpixelPositioning && (!e || e.type === 'moveend')) {
                 this._pos = this._pos.round();
             }
             DOM.setTransform(this._element, `${anchorTranslate[this._anchor]} translate(${this._pos.x}px, ${this._pos.y}px) ${pitch} ${rotation}`);
@@ -57996,6 +58560,7 @@ class Marker extends performance$1.Evented {
         this._scale = options && options.scale || 1;
         this._draggable = options && options.draggable || false;
         this._clickTolerance = options && options.clickTolerance || 0;
+        this._subpixelPositioning = options && options.subpixelPositioning || false;
         this._isDragging = false;
         this._state = 'inactive';
         this._rotation = options && options.rotation || 0;
@@ -58153,6 +58718,7 @@ class Marker extends performance$1.Evented {
             this._map.off('click', this._onMapClick);
             this._map.off('move', this._update);
             this._map.off('moveend', this._update);
+            this._map.off('terrain', this._update);
             this._map.off('mousedown', this._addDragHandler);
             this._map.off('touchstart', this._addDragHandler);
             this._map.off('mouseup', this._onUp);
@@ -58259,6 +58825,21 @@ class Marker extends performance$1.Evented {
             }
             this._element.addEventListener('keypress', this._onKeyPress);
         }
+        return this;
+    }
+    /**
+      * Set the option to allow subpixel positioning of the marker by passing a boolean
+      *
+      * @param value - when set to `true`, subpixel positioning is enabled for the marker.
+      *
+      * @example
+      * ```ts
+      * let marker = new Marker()
+      * marker.setSubpixelPositioning(true);
+      * ```
+      */
+    setSubpixelPositioning(value) {
+        this._subpixelPositioning = value;
         return this;
     }
     /**
@@ -58847,8 +59428,7 @@ class GeolocateControl extends performance$1.Evented {
             }
             this._timeoutId = undefined;
         };
-        this._setupUI = (supported) => {
-            // this method is called asynchronously during onAdd
+        this._setupUI = () => {
             // the control could have been removed before reaching here
             if (!this._map) {
                 return;
@@ -58857,6 +59437,14 @@ class GeolocateControl extends performance$1.Evented {
             this._geolocateButton = DOM.create('button', 'maplibregl-ctrl-geolocate', this._container);
             DOM.create('span', 'maplibregl-ctrl-icon', this._geolocateButton).setAttribute('aria-hidden', 'true');
             this._geolocateButton.type = 'button';
+            this._geolocateButton.disabled = true;
+        };
+        this._finishSetupUI = (supported) => {
+            // this method is called asynchronously during onAdd
+            if (!this._map) {
+                // control has since been removed
+                return;
+            }
             if (supported === false) {
                 performance$1.warnOnce('Geolocation support is not available so the GeolocateControl will be disabled.');
                 const title = this._map._getUIString('GeolocateControl.LocationNotAvailable');
@@ -58866,6 +59454,7 @@ class GeolocateControl extends performance$1.Evented {
             }
             else {
                 const title = this._map._getUIString('GeolocateControl.FindMyLocation');
+                this._geolocateButton.disabled = false;
                 this._geolocateButton.title = title;
                 this._geolocateButton.setAttribute('aria-label', title);
             }
@@ -58906,7 +59495,8 @@ class GeolocateControl extends performance$1.Evented {
     onAdd(map) {
         this._map = map;
         this._container = DOM.create('div', 'maplibregl-ctrl maplibregl-ctrl-group');
-        checkGeolocationSupport().then((supported) => this._setupUI(supported));
+        this._setupUI();
+        checkGeolocationSupport().then((supported) => this._finishSetupUI(supported));
         return this._container;
     }
     /** {@inheritDoc IControl.onRemove} */
@@ -60009,7 +60599,7 @@ const version = packageJSON.version;
  * Necessary for supporting the Arabic and Hebrew languages, which are written right-to-left.
  *
  * @param pluginURL - URL pointing to the Mapbox RTL text plugin source.
- * @param lazy - If set to `true`, mapboxgl will defer loading the plugin until rtl text is encountered,
+ * @param lazy - If set to `true`, maplibre will defer loading the plugin until rtl text is encountered,
  * rtl text will then be rendered only after the plugin finishes loading.
  * @example
  * ```ts

@@ -68,7 +68,6 @@ cp myCA.crt /usr/htdocs/
 # Set wifi AP name
 #
 sed -i "s/^ssid=.*/ssid=${DNS_NAME}/" /etc/hostapd.conf
-sed -i "s/^ssid=.*/ssid=${DNS_NAME}/" /opt/wifi-ap/wifi-ap/hostapd.conf
 
 #
 # Set /etc/dnsmasq.hosts and /etc/hostname
@@ -79,7 +78,7 @@ echo $DNS_NAME > /etc/hostname
 #
 # Set /etc/dnsmasq.conf
 #
-# sed -i "s/^local=.*/local=\/${DNS_NAME}\//" /etc/dnsmasq.conf
+sed -i "s/^local=.*/local=\/${DNS_NAME}\//" /etc/dnsmasq.conf
 
 echo " "
 echo "Done. Reboot unit."
