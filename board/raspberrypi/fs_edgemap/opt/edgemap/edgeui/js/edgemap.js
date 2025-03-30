@@ -136,6 +136,51 @@ class radioList {
         }
 }
 
+// Create sensor marker for local map when sending them
+function localSensorMarkerCreate(messageData) {
+    var incomingMessage = messageData;
+    var trimmedString = incomingMessage.substring(0, 200);
+    const msgArray=trimmedString.split("|");
+    const msgFrom =  msgArray[0];
+    const msgType =  msgArray[1];
+    const msgLocation =  msgArray[2];
+    const msgMessage =  msgArray[3];
+
+    if ( msgArray.length == 4 ) 
+    {
+        //
+        // Sensor marker: [FROM]|sensorMarker|[LAT,LON]|[markedId],[markerStatus],[symbol code]
+        //
+        if ( msgType == "sensorMarker" ) {
+            const location = msgLocation;
+            const locationNumbers = location.replace(/[\])}[{(]/g, '');
+            const locationArray = locationNumbers.split(",");   
+            const sensorDataArray = msgMessage.split(",");
+            const sensorId = sensorDataArray[0];
+            const sensorStatus = sensorDataArray[1];
+            const sensorSymbol = sensorDataArray[2];
+            createSensorMarker(locationArray[0], locationArray[1],sensorId,sensorStatus,sensorSymbol);
+        }
+    }
+}
+
+
+function toggleStyle() {
+    // Get the current URL
+    const url = new URL(window.location.href);
+
+    // Get the current value of the 'style' parameter
+    const currentStyle = url.searchParams.get('style');
+
+    // Determine the new value (toggle between 'bright' and 'dark')
+    const newStyle = currentStyle === 'bright' ? 'dark' : 'bright';
+
+    // Update the 'style' parameter in the URL
+    url.searchParams.set('style', newStyle);
+
+    // Reload the page with the updated URL
+    window.location.href = url.toString();
+}
 
 // reticulum node list
 class reticulumList {
@@ -143,21 +188,33 @@ class reticulumList {
             this.members = [];
             this.age = [];
             this.hash = [];
+            this.link = [];
+            this.snr = [];
+            this.rssi = [];
+            this.q = [];
             
         }
-        add(callsign,age,hash) {            
+        add(callsign,age,hash,link,snr,rssi,q) {            
             const index = this.members.findIndex(x => x === callsign);
             if (index !== -1) {
                 // Update existing but don't over write existing 
                 this.members[index] = callsign;
                 this.age[index] = age;
                 this.hash[index] = hash;
+                this.link[index] = link;
+                this.snr[index] = snr;
+                this.rssi[index] = rssi;
+                this.q[index] = q;
                 return true;
             } else {
                 // Add new
                 this.members.push(callsign);  
                 this.age.push(age); 
-                this.hash.push(hash); 
+                this.hash.push(hash);
+                this.hash.push(link);
+                this.snr.push(snr);
+                this.rssi.push(rssi);
+                this.q.push(q);
                 return true;
             }
             return false;
@@ -169,6 +226,10 @@ class reticulumList {
                 this.members.splice(index, 1);
                 this.age.splice(index, 1);
                 this.hash.splice(index, 1);
+                this.link.splice(index, 1);
+                this.snr.splice(index, 1);
+                this.rssi.splice(index, 1);
+                this.q.splice(index, 1);
                 return true;
             }
             return false;
@@ -187,7 +248,7 @@ class reticulumList {
 
 
 
-function updateRadioListBlock() {
+function updateMeshtasticRadioListBlock() {
     document.getElementById("radiolist").innerHTML = "";
     var radioLoop=0;
     var radioListContent = "";
@@ -195,33 +256,45 @@ function updateRadioListBlock() {
     // radioListContent = "<table width=90%><tr ><td style='border-bottom: 1px solid #0F0;' >Radio</td><td style='border-bottom: 1px solid #0F0;' >Bat</td><td style='border-bottom: 1px solid #0F0;'>Air Util</td><td style='border-bottom: 1px solid #0F0;' align='center'>Hop</td><td style='border-bottom: 1px solid #0F0;' align='center'>S/N</td><td style='border-bottom: 1px solid #0F0;' align='center'>RSSI</td><td style='border-bottom: 1px solid #0F0;' align='center'>Age</td></tr>";
     // List without hop limit
     radioListContent = "<table width=90%><tr ><td style='border-bottom: 1px solid #0F0;' >Radio</td><td style='border-bottom: 1px solid #0F0;' >Bat</td><td style='border-bottom: 1px solid #0F0;'>Air Util</td><td style='border-bottom: 1px solid #0F0;' align='center'>S/N</td><td style='border-bottom: 1px solid #0F0;' align='center'>RSSI</td><td style='border-bottom: 1px solid #0F0;' align='center' title='Age in minutes' >Age</td></tr>";
-    for ( radioLoop = 0; radioLoop < radiosOnSystem.getSize(); radioLoop++) { 
+    for ( radioLoop = 0; radioLoop < meshtasticRadiosOnSystem.getSize(); radioLoop++) { 
         // Calculate age
         let currentTime = Math.round(+new Date()/1000);
-        var ageInSeconds = parseInt ( currentTime ) - parseInt( radiosOnSystem.timestamps[radioLoop] );
+        var ageInSeconds = parseInt ( currentTime ) - parseInt( meshtasticRadiosOnSystem.timestamps[radioLoop] );
         var age = Math.round(ageInSeconds/60);        
         if ( age > 60 ) {
             age = ">60";
         }
-        // radioListContent += "<tr><td>" + radiosOnSystem.members[radioLoop] + "</td><td>" + radiosOnSystem.battery[radioLoop] + " %</td><td>" + radiosOnSystem.airUtilTx[radioLoop] + " %</td><td align='center'>" + radiosOnSystem.hopLimit[radioLoop] + "</td><td align='center'>" + radiosOnSystem.rxSnr[radioLoop] + "</td><td align='center'>" + radiosOnSystem.rxRssi[radioLoop] + "</td><td align='center'>" + age + "</td></tr>";
-        radioListContent += "<tr><td>" + radiosOnSystem.members[radioLoop] + "</td><td>" + radiosOnSystem.battery[radioLoop] + " %</td><td>" + radiosOnSystem.airUtilTx[radioLoop] + " %</td><td align='center'>" + radiosOnSystem.rxSnr[radioLoop] + "</td><td align='center'>" + radiosOnSystem.rxRssi[radioLoop] + "</td><td align='center'>" + age + "</td></tr>";
+        // radioListContent += "<tr><td>" + meshtasticRadiosOnSystem.members[radioLoop] + "</td><td>" + meshtasticRadiosOnSystem.battery[radioLoop] + " %</td><td>" + meshtasticRadiosOnSystem.airUtilTx[radioLoop] + " %</td><td align='center'>" + meshtasticRadiosOnSystem.hopLimit[radioLoop] + "</td><td align='center'>" + meshtasticRadiosOnSystem.rxSnr[radioLoop] + "</td><td align='center'>" + meshtasticRadiosOnSystem.rxRssi[radioLoop] + "</td><td align='center'>" + age + "</td></tr>";
+        radioListContent += "<tr><td>" + meshtasticRadiosOnSystem.members[radioLoop] + "</td><td>" + meshtasticRadiosOnSystem.battery[radioLoop] + " %</td><td>" + meshtasticRadiosOnSystem.airUtilTx[radioLoop] + " %</td><td align='center'>" + meshtasticRadiosOnSystem.rxSnr[radioLoop] + "</td><td align='center'>" + meshtasticRadiosOnSystem.rxRssi[radioLoop] + "</td><td align='center'>" + age + "</td></tr>";
     }
     radioListContent += "</table>";
     document.getElementById("radiolist").innerHTML = radioListContent;
 }
 
+
 function updateReticulumBlock() {
     document.getElementById("reticulumlist").innerHTML = "";
-    
     var reticulumLoop=0;
     var reticulumListContent = "";
-    reticulumListContent = "<table width=90%><tr ><td style='border-bottom: 1px solid #0F0;' >Callsign</td><td style='border-bottom: 1px solid #0F0;' >Age</td><td style='border-bottom: 1px solid #0F0;'>Hash</td></tr>";
+
+    reticulumListContent = "<table width=90%><tr ><td style='border-bottom: 1px solid #0F0;' >Callsign</td><td style='border-bottom: 1px solid #0F0;' >Age</td><td style='border-bottom: 1px solid #0F0;'>Link</td><td style='border-bottom: 1px solid #0F0;'>SNR</td><td style='border-bottom: 1px solid #0F0;'>RSSI</td><td style='border-bottom: 1px solid #0F0;'>Qual</td> </tr>";
     for ( reticulumLoop = 0; reticulumLoop < reticulumNodesOnSystem.getSize(); reticulumLoop++) { 
-        reticulumListContent += "<tr><td>" + reticulumNodesOnSystem.members[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.age[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.hash[reticulumLoop] + "</td></tr>";
+        // Show nodes ages under 30 minutes
+        if ( reticulumNodesOnSystem.age[reticulumLoop] < 30 ) {
+            // Test some background color set to indicate aging nodes
+            if ( reticulumNodesOnSystem.age[reticulumLoop] < 2 ) {
+                reticulumListContent += "<tr><td title='"+reticulumNodesOnSystem.hash[reticulumLoop]+"'>" + reticulumNodesOnSystem.members[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.age[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.link[reticulumLoop]  + "</td><td>"+reticulumNodesOnSystem.snr[reticulumLoop]+"</td><td>"+reticulumNodesOnSystem.rssi[reticulumLoop]+"</td><td>"+reticulumNodesOnSystem.q[reticulumLoop]+"</td></tr>";
+            } else {
+                if ( reticulumNodesOnSystem.age[reticulumLoop] < 10 ) {
+                    opacity = reticulumNodesOnSystem.age[reticulumLoop] / 10
+                } else {
+                    opacity = 1
+                }
+                reticulumListContent += "<tr style='background-color: rgba(255, 49, 49, "+opacity+");;'><td title='"+reticulumNodesOnSystem.hash[reticulumLoop]+"'>" + reticulumNodesOnSystem.members[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.age[reticulumLoop] + "</td><td>" + reticulumNodesOnSystem.link[reticulumLoop]  + "</td><td>"+reticulumNodesOnSystem.snr[reticulumLoop]+"</td><td>"+reticulumNodesOnSystem.rssi[reticulumLoop]+"</td><td>"+reticulumNodesOnSystem.q[reticulumLoop]+"</td></tr>";
+            }
+        }
     }
     reticulumListContent += "</table>";
-    
-    
     document.getElementById("reticulumlist").innerHTML = reticulumListContent;
 }
 
@@ -306,6 +379,7 @@ function toggleReticulumList() {
         fadeInTo09(reticulumListblockDiv ,400,elementOpacity);
         toggleReticulumList.radioListVisible = true; // ???
         fadeOut(radioNotifyDotDiv,200);
+        fadeOut(logDiv,200);
         return;
     }
     if ( toggleReticulumList.radioListVisible == true ) {
@@ -317,14 +391,29 @@ function toggleReticulumList() {
         fadeInTo09(reticulumListblockDiv ,400,elementOpacity);
         toggleReticulumList.radioListVisible = true;
         fadeOut(radioNotifyDotDiv,200);
+        fadeOut(logDiv,200);
         return;
     }    
 }
 
 
-function sendMessage(messagepayload) {
-    if ( msgSocketConnected ) {
-        msgSocket.send( messagepayload );
+// 
+// Send to both bearers ( reticulum & meshtastic ) if they are connected
+// 
+function sendRetiCulumAndMeshtasticMessage(messagepayload) {
+    if ( reticulumMsgSocketConnected ) {
+        reticulumMsgSocket.send( messagepayload );
+    }
+    if ( meshtasticMsgSocketConnected ) {
+        meshtasticMsgSocket.send( messagepayload );
+    }
+}
+
+function sendReticulumControlMessage(messagepayload) {
+    console.log("Sending reticulum control message:" + messagepayload)
+    if ( reticulumStatusSocketConnected ) {
+        reticulumStatusSocket.send( messagepayload + '\n' );
+        notifyMessage("Announce sent", 5000);
     }
 }
 
@@ -353,14 +442,26 @@ function checkPeerExpiry() {
     }
 }*/
 
-// Remove radios if unheard over 300 s
-function checkRadioExpiry() {
+// Remove meshstastic radios if unheard over 300 s
+function checkMeshtasticRadioExpiry() {
     let currentTime = Math.round(+new Date()/1000);
-    for ( radioLoop = 0; radioLoop < radiosOnSystem.getSize(); radioLoop++) {
-        var radioAge = parseInt ( currentTime ) - parseInt( radiosOnSystem.timestamps[peerLoop] );
-        if ( radioAge > 300 ) {
-            radiosOnSystem.remove( radiosOnSystem.members[peerLoop] );
-            updateRadioListBlock(); 
+    for ( nodeLoop = 0; nodeLoop < meshtasticRadiosOnSystem.getSize(); nodeLoop++) {
+        var radioAge = parseInt ( currentTime ) - parseInt( meshtasticRadiosOnSystem.timestamps[nodeLoop] );
+        if ( radioAge > 1200 ) {
+            meshtasticRadiosOnSystem.remove( meshtasticRadiosOnSystem.members[nodeLoop] );
+            updateMeshtasticRadioListBlock(); 
+        }
+    }
+}
+
+// Remove reticulum radios if unheard over 5 minutes
+function checkReticulumRadioExpiry() {
+    let currentTime = Math.round(+new Date()/1000);
+    for ( nodeLoop = 0; nodeLoop < reticulumNodesOnSystem.getSize(); nodeLoop++) {
+        // var radioAge = parseInt ( currentTime ) - parseInt( reticulumNodesOnSystem.timestamps[nodeLoop] );
+        if ( reticulumNodesOnSystem.age[nodeLoop] > 30 ) {
+            reticulumNodesOnSystem.remove( reticulumNodesOnSystem.members[nodeLoop] );
+            updateReticulumBlock(); 
         }
     }
 }
@@ -400,7 +501,11 @@ function submitImage() {
             notifyMessagePayload = notifyMessagePayload + " with location";
             // Send imageMarker if we have location available
             var imgMsg = callSign + `|imageMarker|[`+lastKnownCoordinates.latitude+`,`+lastKnownCoordinates.longitude+`]|`+ payload + '\n';
-            msgSocket.send( imgMsg );
+            
+            // TODO: Handle meshtasticMsgSocket.send( );
+            // reticulumMsgSocket.send( imgMsg );
+            sendRetiCulumAndMeshtasticMessage(imgMsg);
+            
             }
             notifyMessage(notifyMessagePayload, 5000);
        }
@@ -704,11 +809,11 @@ function animateLocalGpsMarker(timestamp) {
 } 
 
 // Send my GPS provided location over meshtastic msg channel when
-// coordinates are clicked on top bar. 
+// coordinates are clicked on top bar.
 function sendMyGpsLocation() {
     var lat = document.getElementById('lat_localgps').innerHTML;
     var lon = document.getElementById('lon_localgps').innerHTML; 
-    sendMessage ( callSign + `|trackMarker|` + lat + `,` + lon + `|GPS-snapshot` + '\n' );
+    sendRetiCulumAndMeshtasticMessage ( callSign + `|trackMarker|` + lat + `,` + lon + `|GPS-snapshot` + '\n' );
     notifyMessage("Local GPS position sent as track marker", 5000);
 }
 
@@ -723,9 +828,8 @@ function animateHighrateMarker(timestamp) {
             var lon = document.getElementById('lon_highrate').innerHTML; 
             var highrateName = document.getElementById('name_highrate').innerHTML;
             var locationComment = lat + "," + lon;
-            milSymbolHighrate.setOptions({ staffComments: locationComment });
             milSymbolHighrate.setOptions({ type: highrateName });
-            
+            milSymbolHighrate.setOptions({ uniqueDesignation: locationComment }); 
             milSymHighrateMarker = milSymbolHighrate.asDOM(); 
             highrateMarker = new maplibregl.Marker({
                     element: milSymHighrateMarker
@@ -806,10 +910,10 @@ function hideTails() {
 // Options to change map style on fly.
 // NOTE: Not in use, since style change loses symbols
 function setDarkStyle() {
-	map.setStyle(style_FI_debug);
+	map.setStyle("styles/style-v4-dark.json");
 }
 function setNormalStyle() {
-	map.setStyle(style_FI);
+	map.setStyle("styles/style-v4.json");
 }
 
 function centerMap(lat,lon) {
@@ -1197,6 +1301,15 @@ function closeRadioList() {
     }
 }
 
+function openReticulumList() {
+    if ( logDiv.style.display == "" || logDiv.style.display !== "inline-block"  ) {
+        if ( reticulumListblockDiv.style.display !== "inline-block" ) {
+            fadeIn(reticulumListblockDiv ,200);
+            fadeOut(radiolistblockDiv,200);
+        }
+    }
+}
+
 function closeReticulumList() {
     if (logDiv.style.display !== "inline-block" ) {
         fadeOut(reticulumListblockDiv ,200);
@@ -1423,7 +1536,8 @@ function onDrag() {
     const lngLat = dragMarker.getLngLat();
     var dragLocationPayload = callSign + `|dragMarker|${lngLat.lng},${lngLat.lat}|dragged` + '\n';
     // NOTE: On meshtastic branch, we disable drag delivery over messaging channel
-    // msgSocket.send( dragLocationPayload ); 
+    // reticulumMsgSocket.send( dragLocationPayload ); 
+    // TODO: Handle meshtasticMsgSocket.send( );
 }
     
 function onDragEnd() {
@@ -1431,7 +1545,8 @@ function onDragEnd() {
     var dragLocationPayload = callSign + `|dragMarker|${lngLat.lng},${lngLat.lat}|released` + '\n';
     // NOTE: On meshtastic  & reticulum branch, we disable drag delivery over messaging channel
     // console.log("Drag: ", dragLocationPayload);
-    // msgSocket.send( dragLocationPayload );
+    // reticulumMsgSocket.send( dragLocationPayload );
+    // TODO: Handle meshtasticMsgSocket.send( );
 }
 
 //
@@ -1474,8 +1589,10 @@ function toggleHillShadow() {
         );
         if (visibility === 'visible') {
             map.setLayoutProperty("hills", 'visibility', 'none');
+            map.setTerrain(null);
         } else {
             map.setLayoutProperty("hills", 'visibility', 'visible');
+            map.setTerrain({ source: 'terrainSource' });
         }   
     }
 }
@@ -1791,14 +1908,16 @@ function submitCoordinateSearch() {
     document.getElementById('coordinateInput').value="";   
 }
 
+//
 // Place holder function to implement proper control towards system
+// 
 function systemControl(action) {
-    console.log("systemControl: ", action);
+    // console.log("systemControl: ", action);
     page_url = 'control.php?id=' + action;
     fetch(page_url) 
         .then(response => response.text()) 
         .then(data => {
-            console.log("returned data: ", data);
+            // console.log("returned data: ", data);
             notifyMessage(data, 10000);
         })
         .catch(error => console.error('Error loading control page:', error));

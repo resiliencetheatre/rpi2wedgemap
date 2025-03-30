@@ -1,6 +1,42 @@
 body { margin: 0; padding: 0;  }
 #map { position: absolute; top: 0; bottom: 0; width: 100%;  }
 
+#map canvas {
+      cursor: crosshair;
+    }
+
+.space-holder {
+    position: absolute;
+    top:80px;
+    left: 10px;
+    color: #00FF00;
+    visibility: hidden;
+}
+
+.space-logo {
+    position: absolute;
+    top:80px;
+    right: 20px;
+    color: #00FF00;
+    visibility: hidden;
+}
+
+.space-holder-left-bottom {
+    position: absolute;
+    bottom:40px;
+    left: 10px;
+    color: #00FF00;
+    padding: 5px;
+    visibility: hidden;
+}
+
+.space-holder-right-bottom {
+    position: absolute;
+    bottom:40px;
+    right: 10px;
+    color: #00FF00;
+    padding: 5px;
+}
 
 
 .map-right-upload-overlay {
@@ -764,16 +800,15 @@ input:focus {
 
 
 
-
-/* Tooltip container */
+/* Tooltip container 
 .tooltip {
   top: 2px;
   position: relative;
   display: inline-block;
-  border-bottom: 1px dotted black; /* If you want dots under the hoverable text */
+  border-bottom: 1px dotted black;
 }
-
-/* Tooltip text */
+*/
+/* Tooltip text 
 .tooltip .tooltiptext {
   visibility: hidden;
   width: 160px;
@@ -783,17 +818,19 @@ input:focus {
   padding: 5px 0;
   border-radius: 6px;
   display: inline-block;
-  /* Position the tooltip text - see examples below! */
   position: absolute;
   z-index: 10;
   top: 30px;
   left: -10px;
-}
+}*/
 
-/* Show the tooltip text when you mouse over the tooltip container */
+/* Show the tooltip text when you mouse over the tooltip container
 .tooltip:hover .tooltiptext {
   visibility: visible;
 }
+ */
+
+
 
 /* Tooltip container right side*/
 .tooltipright {
@@ -1218,15 +1255,15 @@ input:focus {
 	border-radius: 5px;
     width: 300px;
     height: 150px;
-	bottom: 50px;
+	bottom: 10px;
     left: 10px;
 	padding: 5px;
 	opacity: 0.6;
 }
 .toprightlogoradiolistblock {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: -8px;
+  right: -8px;
 }
 
 .reticulumlistblock {
@@ -1235,13 +1272,14 @@ input:focus {
 	color: #0F0;
 	position: absolute;
 	border-radius: 5px;
-    width: 300px;
+    width: 340px;
     height: 150px;
 	bottom: 10px;
     left: 10px;
 	padding: 5px;
 	opacity: 0.6;
 }
+
 .toprightlogoreticulumblock {
   position: absolute;
   top: -8px;
@@ -1393,8 +1431,8 @@ input:focus {
 	position: absolute;
 	border-radius: 5px;
     width: 290px;
-    height: 50px;
-	bottom: 220px;
+    height: 100px;
+	bottom: 180px;
     left: 10px;
 	padding: 10px;
 	opacity: 0.6;
@@ -1411,6 +1449,7 @@ input:focus {
 	right: 4px;
 	padding: 2px;
 	opacity: 1.0;
+    cursor: pointer;
 }
 .manualLocation-define-button-style {
 	font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
@@ -1423,6 +1462,21 @@ input:focus {
 	right: 4px;
 	padding: 2px;
 	opacity: 1.0;
+    cursor: pointer;
+}
+
+.manualLocation-abort-button-style {
+	font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+	position: absolute;
+	width: 40px;
+    color: #0f0;
+    border: 1px solid #00fF00;
+	border-radius: 5px;
+	top: 64px;
+	right: 4px;
+	padding: 2px;
+	opacity: 1.0;
+    cursor: pointer;
 }
 
 .manualLocation-message-style {
@@ -1460,11 +1514,34 @@ body {
 	font-size: 13px;
 }
 
+/* SVG icon tooltip tryout */
 
+  .has-tooltip {
+    position: relative;
+  }
+  
+  /* Hidden by default */
+  .tooltip {
+    display: none;
+    position: absolute;
+    background-color: #333;
+    color: #0F0;
+    padding: 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
+    top: 240%; /* Position below the icon */
+    left: 0%;
+    transform: translateX(-0%);
+  }
 
+  /* Show the tooltip on hover */
+  .has-tooltip:hover + .tooltip {
+    display: block;
+  }
 
-        
-
+/* Top bar SVG icons */
 .map-top-status-icon-overlay {
     font: 14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
 	background-color: #333;
@@ -1481,10 +1558,36 @@ body {
     /*width: 60%;*/
 }
 
+/* original*/
 .icon-container {
-    display: flex; /* Makes child elements (SVGs) align in a row */
-    gap: 5px; /* Adds space between SVGs */
-    width: 60%;
+    display: flex;
+    gap: 2px;
+    width: 90%;
+    
+    /*border-style: solid;*/
+}
+
+.icon-container-new {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 90%;
+    max-width: 700px; /* Adjust the container size as needed */
+    margin: 0 auto;
+    /*border-style: solid;*/
+}
+
+.icon {
+    flex-grow: 1; /* Each icon will equally expand to fit */
+    display: flex;
+    justify-content: center;
+    padding: 1px;
+    border-style: solid;
+}
+
+.svg-icon {
+    width: 48px;
+    height: 48px;
 }
 
 
@@ -1504,7 +1607,7 @@ body {
     /*margin-top: 15px;*/
 	opacity: 0.9;
     height: 20px;
-    z-index: 10;
+    z-index: 5;
 }
 
 .map-top-gpslocation-overlay {
@@ -1514,7 +1617,7 @@ body {
 	position: absolute;
 	border-radius: 5px;
 	top: 45px;
-    right: 35%;
+    right: 40%;
     /*width: 60%;*/
     left: 40%;
     
@@ -1522,8 +1625,23 @@ body {
     /*margin-top: 15px;*/
 	opacity: 0.9;
     height: 20px;
-    z-index: 10;
+    z-index: 5;
 }
+
+.map-top-reticulum-overlay {
+    font: 14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+	background-color: #333;
+	color: #0f0;
+	position: absolute;
+	border-radius: 5px;
+	top: 45px;
+    right: 15%;
+    left: 65%;
+	opacity: 0.9;
+    height: 20px;
+    z-index: 5;
+}
+
 
 .map-top-latlon-overlay {
     font: 14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
@@ -1550,6 +1668,11 @@ body {
     padding-top: 3px; 
     padding-left: 5px;
 }
+
+.coordinateSearchTitle {
+	font-size: 15px;
+}
+
 .coordinateSearch {
 	display: none;
 	font: 12px 'Helvetica Neue', Arial, Helvetica, sans-serif;
@@ -1562,19 +1685,16 @@ body {
 	border-radius: 5px;
 	padding-top: 0px;
 	padding-left: 5px;
-	width: 300px;
+	width: 230px;
 	height: 40px; 
 	opacity: 0.9;
     
 }
 
-.coordinateSearchTitle {
-	font-size: 15px;
-}
-
 .coordinateSearchInput {
 	font-size: 15px;
-	/*width: 60%;
+    width: 70%;
+	/*
 	 margin-top: -10px; */
 	border-top-style: hidden;
 	border-right-style: hidden;
@@ -1584,10 +1704,94 @@ body {
 	background-color: transparent;
 	color: #0F0;
 }
+.feather-closeCoordinateSearch {
+  width: 30px;
+  height: 30px;
+  vertical-align: bottom;
+  stroke: #F20;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  padding: 5px 5px;
+}
 
 
+/*
+.distance-control-button-style {
+    font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    width: 40px;
+    color: #0f0;
+    border: 1px solid #00FF00;
+    border-radius: 5px;
+    padding: 2px;
+    opacity: 1.0;
+    cursor: pointer;
+    height: 90%
+    padding: 5px 10px;
+    cursor: pointer;
+    text-align: center;
+    min-width: 40px;
+}*/
 
 
+.distance-bar-style {    
+    font: 14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    background-color: #333;
+    color: #0f0;
+    position: absolute;
+    border-radius: 5px;
+    top: 95px;
+    right: 15%;
+    left: 15%;
+    padding: 2px;
+    opacity: 0.9;
+    height: 30px;
+    z-index: 1;
+    display: none;
+    
+    
+    align-items: center; /* Aligns items vertically */
+    justify-content: space-between; /* Even spacing */
+    gap: 5px; /* Adds spacing between elements */
+    
+}
+.distance-value-style {
+    font: 14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    /* background-color: rgba(0, 0, 0, 0.8); */
+    color: #0f0;
+    line-height: 18px;
+    display: block;
+    margin: 0;
+    padding: 5px 10px;
+    border-radius: 5px;
+    
+    flex-grow: 1; /* Allows the distance value to take available space */
+}
+
+.feather-mesurementIcon {
+  width: 20px;
+  height: 20px;
+  vertical-align: bottom;
+  stroke: #0F0;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  padding: 5px 5px;
+}
+
+.feather-mesurementIconRed {
+  width: 20px;
+  height: 20px;
+  vertical-align: bottom;
+  stroke: #F00;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  padding: 5px 5px;
+}
 
 
 

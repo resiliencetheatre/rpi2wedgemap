@@ -54,9 +54,9 @@ class Utils {
 
         if(parsedSeconds.minutes > 0){
             if(parsedSeconds.minutes === 1){
-                return "a minute ago";
+                return "1 min ago";
             } else {
-                return parsedSeconds.minutes + " minutes ago";
+                return parsedSeconds.minutes + " mins ago";
             }
         }
 
@@ -143,7 +143,7 @@ class Utils {
 
     static isInterfaceEnabled(iface) {
         const rawValue = iface.enabled ?? iface.interface_enabled;
-        const value = rawValue?.toLowerCase();
+        const value = rawValue?.toString()?.toLowerCase();
         return value === "on" || value === "yes" || value === "true";
     }
 

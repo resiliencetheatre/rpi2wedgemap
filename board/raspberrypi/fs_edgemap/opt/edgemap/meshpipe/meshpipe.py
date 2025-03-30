@@ -5,6 +5,9 @@
 # Copyright (c) Resilience Theatre, 2024
 # Copyright (c) 2021, datagod
 # 
+# https://github.com/meshtastic/python
+# https://python.meshtastic.org/
+#
 # FIFO files:
 #
 # /tmp/msgincoming -> meshtastic radio
@@ -26,6 +29,19 @@
 #  In:
 #  edgex|trackMarker|23.6406054,50.7603593|GPS-snapshot
 #
+#  For development, read fifo's:
+#
+#  while [ 1 ]; do cat /tmp/msgchannel; sleep 1; done;
+#  while [ 1 ]; do cat /tmp/statusin; sleep 1; done;
+#
+#  Export MESHTASTIC port:
+#
+#  export $(xargs < meshtastic.env )
+#
+#  Setting this option to 'true' means the device will ignore the hourly 
+#  duty cycle limit in Europe. 
+# 
+#  meshtastic --port /dev/ttyACM0 --set lora.override_duty_cycle true
 #
 
 import meshtastic
@@ -160,8 +176,14 @@ def onReceive(packet, interface):
     To       = packet.get('to')
     From     = packet.get('from')
     
+    # print('** onReceive() from: {}'.format(From))
+    # print('** onReceive() Decoded: {}'.format(Decoded))
+    # sys.stdout.flush()
+        
     DecodePacket('MainPacket',packet)
+    
     if packet is not None:
+                
         fromIdentString = packet.get('fromId')
         if fromIdentString is not None:
             fromIdent = fromIdentString[1:]
@@ -190,15 +212,20 @@ def onReceive(packet, interface):
                 fifo_write = open('/tmp/statusin', 'w')
                 fifo_write.write(meshtasticmessage)
                 fifo_write.flush()
+                fifo_write.close()
 
     if Decoded is not None:
+        
         Message  = Decoded.get('text')
+        
         if(Message):
             hexFromValue = "{0:0>8X}".format(From)
             print("Incoming: {: <20} {: <20}".format(hexFromValue,Message[:-1]))
+            sys.stdout.flush()
             fifo_write = open('/tmp/msgchannel', 'w')
             fifo_write.write(Message)
             fifo_write.flush()
+            fifo_write.close()
             if( fromIdent.upper() == hexFromValue ):
                 # edgex|trackMarker|23.6406054,50.7603593|GPS-snapshot
                 messageFields = Message.split('|')
@@ -254,12 +281,13 @@ def meshtasticDbUpdate(callsign,lat,lon,event,radio_id,snr,rssi):
 
 def onConnectionEstablished(interface, topic=pub.AUTO_TOPIC): 
     
-    To   = "All"
-    current_time = datetime.now().strftime("%H:%M:%S")
-    Message = "{}|meshpipe|-|{}".format(current_time,DeviceName[1:])
+    # To   = "All"
+    # current_time = datetime.now().strftime("%H:%M:%S")
+    # Message = "{}|meshpipe|-|{}".format(current_time,DeviceName[1:])
 
     try:
       print("Connected to meshtastic radio: {}".format(myRadioHexId) )
+      sys.stdout.flush()
       # interface.sendText(Message, wantAck=False)
       # print("== Connection up packet sent ==")
       # print("To:      {}".format(To))
@@ -273,14 +301,17 @@ def onConnectionEstablished(interface, topic=pub.AUTO_TOPIC):
 
 def onConnectionLost(interface, topic=pub.AUTO_TOPIC): 
     print('onConnectionLost, exiting. \n')
+    sys.stdout.flush()
     os._exit(0)  # Forcefully exits the entire Python process
 
 def onNodeUpdated(interface, topic=pub.AUTO_TOPIC): 
     print('onNodeUpdated \n')
+    sys.stdout.flush()
    
 
 def SIGINT_handler(signal_received, frame):
     print('SIGINT detected. \n')
+    sys.stdout.flush()
     os._exit(0)  # Forcefully exits the entire Python process
 
 
@@ -297,13 +328,15 @@ def send_msg(interface, Message):
 
 def send_msg_from_fifo(interface, Message):
     outMsg = Message + '\n'
-    interface.sendText(outMsg, wantAck=False)
-    print('  Sending broadcast message: {}'.format(Message))
+    interface.sendText(outMsg, wantAck=True)
+    print('  Sending broadcast message (wantAck=True) : {}'.format(Message))
+    sys.stdout.flush()
 
 def send_msg_from_fifo_to_one_node(interface, Message, nodeId):
     outMsg = Message + '\n'
     interface.sendText(outMsg, wantAck=True,destinationId=nodeId)
     print("Sending p2p message to: {}".format(nodeId) )
+    sys.stdout.flush()
     # print("To:      {}".format(nodeId))
     # print("From:    BaseStation")
     # print('Message: {}'.format(Message))
@@ -352,6 +385,7 @@ def GetMyNodeInfo(interface):
       print('Battery:   ',TheNode['position']['batteryLevel'])
 
     print('---\n')
+    sys.stdout.flush()
 
 
 def deg2num(lat_deg, lon_deg, zoom):
@@ -361,8 +395,8 @@ def deg2num(lat_deg, lon_deg, zoom):
   ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
   return (xtile, ytile)
       
-# TODO: Deliver nodes to fifo or create mesh status fifo for UI?
 
+# TODO: Deliver nodes to fifo or create mesh status fifo for UI?
 def DisplayNodes(interface):
     
     print('\n-- DisplayNodes --')
@@ -372,6 +406,7 @@ def DisplayNodes(interface):
         print("NAME:      {}".format(node['user']['longName']))  
         print("NODE:      {}".format(node['num']))  
         print("ID:        {}".format(node['user']['id']))  
+        sys.stdout.flush()
         #print("MAC:       {}".format(node['user']['macaddr']))
         if 'position' in node.keys():
           #used to calculate XY for tile servers
@@ -382,23 +417,27 @@ def DisplayNodes(interface):
             print("Tile:      {}/{}".format(xtile,ytile)) 
             print("LAT:       {}".format(node['position']['latitude']))  
             print("LONG:      {}".format(node['position']['longitude']))
+            sys.stdout.flush()
 
           if 'batteryLevel' in node['position']:
             Battery = node['position']['batteryLevel']
             print("Battery:   {}".format(Battery))  
+            sys.stdout.flush()
         
         if 'lastHeard' in node.keys():
           LastHeardDatetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(node['lastHeard']))
           print("LastHeard: {}".format(LastHeardDatetime))  
+          sys.stdout.flush()
         print('-----')
         
         # Update UI
         nodeidstring = node['user']['id']
         nodeidstring = nodeidstring[1:]
-        meshtasticmessage = "peernode," + nodeidstring
-        fifo_write = open('/tmp/statusin', 'w')
-        fifo_write.write(meshtasticmessage)
-        fifo_write.flush()
+        meshtasticmessage = "peernode," + nodeidstring + "\n"
+        fifo_status_write = open('/tmp/statusin', 'w')
+        fifo_status_write.write(meshtasticmessage)
+        fifo_status_write.flush()
+        fifo_status_write.close()
 
     except Exception as ErrorMessage:
       TraceMessage = traceback.format_exc()
@@ -410,15 +449,27 @@ def create_fifo_pipe(pipe_path):
     try:
         os.mkfifo(pipe_path)
         print(f"Named pipe created at {pipe_path}")
+        sys.stdout.flush()
+        
     except OSError as e:
         print(f"Error: {e}")
-
+        sys.stdout.flush()
+  
+  
 # Thread T2
 def read_manual_gps():
     global myRadioHexId
-    min_interval_time=30
-    max_interval_time=60
+    global interface # Nov 16th
+    
+    # Randomize time
+    min_interval_time=120
+    max_interval_time=240
+    
+    # Position broadcast on
+    send_positions = True
+
     print("Starting read_manual_gps()")
+    sys.stdout.flush()
     t2_start_time = time.time()
     t2_interval_rand = randrange(min_interval_time, max_interval_time)
     t2_callsign_from_file = "no-callsign"
@@ -427,50 +478,87 @@ def read_manual_gps():
     
     try:
         while True:
+            
             # Manual loop should only run when location.txt is present!
-            if ( os.path.isfile("/opt/edgemap-persist/location.txt") ):            
-                
-                # Randomize sending interval
-                t2_end_time = time.time()
-                t2_elapsed_time = t2_end_time - t2_start_time
-                if ( t2_elapsed_time > t2_interval_rand ):
-                    # print("Manual loop",t2_elapsed_time,t2_interval_rand)
-                    if ( os.path.isfile("/opt/edgemap-persist/callsign.txt") ):
-                        t2_callsign_file = open("/opt/edgemap-persist/callsign.txt", "r")
-                        t2_callsign_from_file = t2_callsign_file.readline()
-                        t2_callsign_file.close()
-                        # Read location from file
-                        if ( os.path.isfile("/opt/edgemap-persist/location.txt") ):
-                            t2_location_file = open("/opt/edgemap-persist/location.txt","r")
-                            t2_location_from_file = t2_location_file.readline()
-                            t2_location_file.close()
-                            t2_gps_array = t2_location_from_file.split(",")
-                            t2_lkg_lat = t2_gps_array[0].rstrip()
-                            t2_lkg_lon = t2_gps_array[1].rstrip()
-                            # print("Manual GPS: ",t2_callsign_from_file,t2_location_from_file)                
-                            # Send
-                            t2_track_marker_string= t2_callsign_from_file + "|trackMarker|" + t2_lkg_lon + "," + t2_lkg_lat + "|Manual position"
-                            send_msg_from_fifo(interface, t2_track_marker_string)
-                            # Update own location to radio.db when fix is manual
-                            meshtasticDbUpdate(t2_callsign_from_file,t2_lkg_lat,t2_lkg_lon,"trackMarker",myRadioHexId,"0","0");
-                            t2_start_time = time.time()
-                            t2_interval_rand = randrange(min_interval_time, max_interval_time)
-                                
-                    else:
-                        t2_callsign_from_file = "no-callsign"
+            if ( os.path.isfile("/opt/edgemap-persist/location.txt") ):
+
+                # Read send interval from /opt/edgemap-persist/pos_interval.txt (if present)
+                if ( os.path.isfile("/opt/edgemap-persist/pos_interval.txt") ):
+                    t2_interval_file = open("/opt/edgemap-persist/pos_interval.txt","r")
+                    t2_interval_from_file = t2_interval_file.readline().rstrip()
+                    t2_interval_file.close()
                     
-                    t2_start_time = time.time()
-                    t2_interval_rand = randrange(min_interval_time, max_interval_time)
+                    # Based on Web UI instructed values, implement 2,4 and 10 minutes
+                    # position sending over meshtastic. Random minutes +/- 30 seconds. 
+                    # TODO: Implement off and manual send
+                    if t2_interval_from_file == '2':
+                        t2_interval_rand = randrange(90, 150)
+                        send_positions = True
+                    if t2_interval_from_file == '4':
+                        t2_interval_rand = randrange(210, 270)
+                        send_positions = True
+                    if t2_interval_from_file == '10':
+                        t2_interval_rand = randrange(570, 630)
+                        send_positions = True
+                    if t2_interval_from_file == 'off':
+                        send_positions = False
+                
+                # Slow loop down a bit
+                time.sleep(1)
+                
+                # Send if allowed
+                if ( send_positions ):          
+                    # Randomize sending interval
+                    t2_end_time = time.time()
+                    t2_elapsed_time = t2_end_time - t2_start_time
+                
+                    if ( t2_elapsed_time > t2_interval_rand ):
+                        # print("Manual loop",t2_elapsed_time,t2_interval_rand)
+                        if ( os.path.isfile("/opt/edgemap-persist/callsign.txt") ):
+                            t2_callsign_file = open("/opt/edgemap-persist/callsign.txt", "r")
+                            t2_callsign_from_file = t2_callsign_file.readline()
+                            t2_callsign_file.close()
+                            # Read location from file
+                            if ( os.path.isfile("/opt/edgemap-persist/location.txt") ):
+                                t2_location_file = open("/opt/edgemap-persist/location.txt","r")
+                                t2_location_from_file = t2_location_file.readline()
+                                t2_location_file.close()
+                                t2_gps_array = t2_location_from_file.split(",")
+                                t2_lkg_lat = t2_gps_array[0].rstrip()
+                                t2_lkg_lon = t2_gps_array[1].rstrip()
+                                # print("Manual GPS: ",t2_callsign_from_file,t2_location_from_file)                
+                                # Send
+                                t2_track_marker_string= t2_callsign_from_file.rstrip() + "|trackMarker|" + t2_lkg_lon + "," + t2_lkg_lat + "|Manual position"
+                                send_msg_from_fifo(interface, t2_track_marker_string)
+                                # Update own location to radio.db when fix is manual
+                                meshtasticDbUpdate(t2_callsign_from_file,t2_lkg_lat,t2_lkg_lon,"trackMarker",myRadioHexId,"0","0");
+                                t2_start_time = time.time()
+                                t2_interval_rand = randrange(min_interval_time, max_interval_time)
+                                    
+                        else:
+                            t2_callsign_from_file = "no-callsign"
+                        
+                        t2_start_time = time.time()
+                        t2_interval_rand = randrange(min_interval_time, max_interval_time)
+                else:
+                    time.sleep(60)
+                    print("Position send is OFF")
+                    
+    
     except Exception as e:
         print(f"Exception caught in thread: {e}")
+        sys.stdout.flush()
         os._exit(0)  # Forcefully exits the entire Python process
-                
+
+
 # Live GPS thread T1
 def read_live_gps():
     global myRadioHexId
+    global interface # Nov 16th
     min_interval_time=60
     max_interval_time=90
     print('Starting read_live_gps()')
+    sys.stdout.flush()
     FIFO = '/tmp/livegps'
     fifo_read=open(FIFO,'r')
     # Get initial state
@@ -515,7 +603,7 @@ def read_live_gps():
                         
                         start_time = time.time()
                         interval_rand = randrange(min_interval_time, max_interval_time)
-                        # print("track_marker_string: ", track_marker_string)
+                        print("track_marker_string: ", track_marker_string)
                         lkg_lat = gps_array[5]
                         lkg_lon = gps_array[4]
                     
@@ -559,19 +647,23 @@ def read_live_gps():
                             
                             start_time = time.time()
                             interval_rand = randrange(min_interval_time, max_interval_time)
-                            # print("LKG: track_marker_string: ", track_marker_string)
+                            print("LKG: track_marker_string: ", track_marker_string)
                         else:
-                            # print("We don't have last known good position. Not sending anything. ")
+                            print("We don't have last known good position. Not sending anything. ")
                             start_time = time.time()
                             interval_rand = randrange(min_interval_time, max_interval_time)
                                 
                     pass
             else:
                 # print("GPS location send is overridden by manually provided location!")
+                # let thread sleep a bit
+                time.sleep(2) 
                 pass
           
           else:
             # No fifo data
+            # let thread sleep a bit
+            time.sleep(2)
             pass
     
     except Exception as e:
@@ -580,7 +672,9 @@ def read_live_gps():
 
 # Read incoming FIFO thread T3
 def read_incoming_fifo():
+    global interface # Nov 16th
     print("Started read_incoming_fifo()")
+    sys.stdout.flush()
     # Open FIFO for reading
     FIFO = '/tmp/msgincoming'
     fifo_read=open(FIFO,'r')
@@ -591,7 +685,8 @@ def read_incoming_fifo():
           # print('While loop')
           fifo_msg_in = fifo_read.readline()[:-1]
           if not fifo_msg_in == "":
-            # print('FIFO Message in: ', fifo_msg_in)
+            print('FIFO Message in: ', fifo_msg_in)
+            sys.stdout.flush()
             # Send to single NODE:  [CALLSIGN]|[MESSAGE]|[TO_NODE_ID]
             # Send to broadcast:    [CALLSIGN]|[MESSAGE]
             answer_array=fifo_msg_in.split("|")
@@ -600,10 +695,12 @@ def read_incoming_fifo():
             # Send as broadcast by default on Edgemap UI
             if array_len == 2 or array_len == 4:
                 print("Sending to broadcast")
+                sys.stdout.flush()
                 send_msg_from_fifo(interface, fifo_msg_in)
             # Send as individual recipient
             if array_len == 3:
                 print("Sending to single recipient")
+                sys.stdout.flush()
                 answer_recipient = '!'+answer_array[2]
                 answer_payload = answer_array[0]+"|"+answer_array[1]
                 send_msg_from_fifo_to_one_node(interface, answer_payload, answer_recipient)
@@ -694,6 +791,7 @@ def main():
 
 
     print("Connecting to device at port {}".format(args.port))
+    sys.stdout.flush()
     interface = meshtastic.serial_interface.SerialInterface(args.port)
 
     # Get node info for connected device
@@ -707,9 +805,13 @@ def main():
     pub.subscribe(onReceive, "meshtastic.receive")
 
     # Display nodes
-    DisplayNodes(interface)
+    # DisplayNodes(interface)
 
     # Launch threads
+    # BUG: Live blocks execution => 
+    #      looks that loop in read_live_gps() was without time.sleep() 
+    #      and it blocked. Disabling t1 was temporal cure, now there is 
+    #      time.sleep() in thread to prevent blocking.
     t1 = threading.Thread(target=read_live_gps, args=())
     t2 = threading.Thread(target=read_manual_gps, args=()) 
     t3 = threading.Thread(target=read_incoming_fifo, args=()) 
@@ -719,6 +821,8 @@ def main():
     t1.join()
     t2.join()
     t3.join()
+    
+    print("XXXXXXXXXXXXXXXXXXXXX")
 
     interface.close()  
 

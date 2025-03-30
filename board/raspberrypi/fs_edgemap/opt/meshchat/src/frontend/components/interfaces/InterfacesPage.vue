@@ -1,8 +1,8 @@
 <template>
-    <div class="flex flex-col flex-1 overflow-hidden min-w-full sm:min-w-[500px]">
+    <div class="flex flex-col flex-1 overflow-hidden min-w-full sm:min-w-[500px] dark:bg-zinc-950">
         <div class="overflow-y-auto p-2 space-y-2">
 
-            <!-- warning -->
+            <!-- warning - keeping orange-500 for warning visibility in both modes -->
             <div class="flex bg-orange-500 p-2 text-sm font-semibold leading-6 text-white rounded shadow">
                 <div class="my-auto">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -10,20 +10,47 @@
                     </svg>
                 </div>
                 <div class="ml-2 my-auto">Reticulum MeshChat must be restarted for any interface changes to take effect.</div>
-                <button v-if="isElectron" @click="relaunch" type="button" class="ml-auto my-auto inline-flex items-center gap-x-1 rounded-md bg-white px-2 py-1 text-sm font-semibold text-black shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                <button v-if="isElectron" 
+                    @click="relaunch" 
+                    type="button" 
+                    class="ml-auto my-auto inline-flex items-center gap-x-1 rounded-md bg-white dark:bg-zinc-800 px-2 py-1 text-sm font-semibold text-black dark:text-zinc-200 shadow-sm hover:bg-gray-50 dark:hover:bg-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white dark:focus-visible:outline-zinc-700">
                     <span>Restart Now</span>
                 </button>
             </div>
 
-            <div>
+            <div class="flex space-x-1">
+
+                <!-- Add Interface button -->
                 <RouterLink :to="{ name: 'interfaces.add' }">
-                    <button type="button" class="my-auto inline-flex items-center gap-x-1 rounded-md bg-gray-500 px-2 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500">
+                    <button type="button" 
+                        class="my-auto inline-flex items-center gap-x-1 rounded-md bg-gray-500 dark:bg-zinc-700 px-2 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-400 dark:hover:bg-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 dark:focus-visible:outline-zinc-700">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
                         <span>Add Interface</span>
                     </button>
                 </RouterLink>
+
+                <!-- Import button -->
+                <div class="my-auto">
+                    <button @click="showImportInterfacesModal" type="button" class="inline-flex items-center gap-x-1 rounded-md bg-gray-500 dark:bg-zinc-700 px-2 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-400 dark:hover:bg-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 dark:focus-visible:outline-zinc-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        <span>Import</span>
+                    </button>
+                </div>
+
+                <!-- Export button -->
+                <div class="my-auto">
+                    <button @click="exportInterfaces" type="button" class="inline-flex items-center gap-x-1 rounded-md bg-gray-500 dark:bg-zinc-700 px-2 py-1 text-sm font-semibold text-white shadow-sm hover:bg-gray-400 dark:hover:bg-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 dark:focus-visible:outline-zinc-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span>Export</span>
+                    </button>
+                </div>
+
             </div>
 
             <!-- enabled interfaces -->
@@ -33,20 +60,26 @@
                 @enable="enableInterface(iface._name)"
                 @disable="disableInterface(iface._name)"
                 @edit="editInterface(iface._name)"
+                @export="exportInterface(iface._name)"
                 @delete="deleteInterface(iface._name)"/>
 
             <!-- disabled interfaces -->
-            <div v-if="disabledInterfaces.length > 0" class="font-semibold">Disabled Interfaces</div>
+            <div v-if="disabledInterfaces.length > 0" class="font-semibold dark:text-zinc-200">Disabled Interfaces</div>
             <Interface
                 v-for="iface of disabledInterfaces"
                 :iface="iface"
                 @enable="enableInterface(iface._name)"
                 @disable="disableInterface(iface._name)"
                 @edit="editInterface(iface._name)"
+                @export="exportInterface(iface._name)"
                 @delete="deleteInterface(iface._name)"/>
 
         </div>
     </div>
+
+    <!-- Import Dialog -->
+    <ImportInterfacesModal ref="import-interfaces-modal" @dismissed="onImportInterfacesModalDismissed"/>
+
 </template>
 
 <script>
@@ -54,10 +87,13 @@ import DialogUtils from "../../js/DialogUtils";
 import ElectronUtils from "../../js/ElectronUtils";
 import Interface from "./Interface.vue";
 import Utils from "../../js/Utils";
+import ImportInterfacesModal from "./ImportInterfacesModal.vue";
+import DownloadUtils from "../../js/DownloadUtils";
 
 export default {
     name: 'InterfacesPage',
     components: {
+        ImportInterfacesModal,
         Interface,
     },
     data() {
@@ -105,56 +141,12 @@ export default {
                 // update data
                 const interfaces = response.data.interface_stats?.interfaces ?? [];
                 for(const iface of interfaces){
-                    this.interfaceStats[iface.name] = iface;
+                    this.interfaceStats[iface.short_name] = iface;
                 }
 
             } catch(e) {
                 // do nothing if failed to load interfaces
             }
-        },
-        findInterfaceStats(interfaceName) {
-            const interfaceDescription = this.getInterfaceDescription(interfaceName);
-            return this.interfaceStats[interfaceDescription];
-        },
-        getInterfaceDescription(interfaceName) {
-
-            // the interface-stats api returns interface names like the following;
-            //
-            // "AutoInterface[Default Interface]"
-            // "RNodeInterface[RNode LoRa Interface Fast]"
-            // "TCPInterface[RNS Testnet Amsterdam/amsterdam.connect.reticulum.network:4965]"
-            //
-            // however, the interfaces api just returns;
-            // "Default Interface"
-            // "RNode LoRa Interface Fast"
-            // "RNS Testnet Amsterdam"
-            //
-            // so we need to map the basic interface name to the former, so we can lookup stats for the interface
-            const iface = this.interfaces[interfaceName];
-            if(iface){
-                switch(iface.type){
-                    case "TCPClientInterface": {
-                        // yes, this is meant to be passed as TCPInterface, even though the interface type includes client...
-                        // example: "TCPInterface[RNS Testnet Amsterdam/amsterdam.connect.reticulum.network:4965]";
-                        return `TCPInterface[${interfaceName}/${iface.target_host}:${iface.target_port}]`;
-                    }
-                    case "TCPServerInterface": {
-                        // example: "TCPServerInterface[TCP Server Interface/0.0.0.0:4242]";
-                        return `TCPServerInterface[${interfaceName}/${iface.listen_ip}:${iface.listen_port}]`;
-                    }
-                    case "UDPInterface": {
-                        // example: "UDPInterface[UDP Interface/0.0.0.0:1234]";
-                        return `UDPInterface[${interfaceName}/${iface.listen_ip}:${iface.listen_port}]`;
-                    }
-                    default: {
-                        // example: "RNodeInterface[RNode LoRa Interface Fast]",
-                        return `${iface.type}[${interfaceName}]`;
-                    }
-                }
-            }
-
-            return null;
-
         },
         async enableInterface(interfaceName) {
 
@@ -217,6 +209,45 @@ export default {
             await this.loadInterfaces();
 
         },
+        async exportInterfaces() {
+            try {
+
+                // fetch exported interfaces
+                const response = await window.axios.post('/api/v1/reticulum/interfaces/export');
+
+                // download file to browser
+                DownloadUtils.downloadFile("meshchat_interfaces.txt", new Blob([response.data]));
+
+            } catch(e) {
+                DialogUtils.alert("Failed to export interfaces");
+                console.error(e);
+            }
+        },
+        async exportInterface(interfaceName) {
+            try {
+
+                // fetch exported interfaces
+                const response = await window.axios.post('/api/v1/reticulum/interfaces/export', {
+                    selected_interface_names: [
+                        interfaceName,
+                    ],
+                });
+
+                // download file to browser
+                DownloadUtils.downloadFile(`${interfaceName}.txt`, new Blob([response.data]));
+
+            } catch(e) {
+                DialogUtils.alert("Failed to export interface");
+                console.error(e);
+            }
+        },
+        showImportInterfacesModal() {
+            this.$refs["import-interfaces-modal"].show();
+        },
+        onImportInterfacesModalDismissed() {
+            // reload interfaces as something may have been imported
+            this.loadInterfaces();
+        },
     },
     computed: {
         isElectron() {
@@ -226,7 +257,7 @@ export default {
             const results = [];
             for(const [interfaceName, iface] of Object.entries(this.interfaces)){
                 iface._name = interfaceName;
-                iface._stats = this.findInterfaceStats(interfaceName);
+                iface._stats = this.interfaceStats[interfaceName];
                 results.push(iface);
             }
             return results;
